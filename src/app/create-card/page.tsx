@@ -1,12 +1,19 @@
 "use client";
 
-import { useEffect, useState, type FormEvent, type ChangeEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { ArrowLeft, Building2, Globe, Mail, MapPin, Phone, UserRound, Linkedin, Save } from "lucide-react";
 import { getCountries, getCountryCallingCode } from "libphonenumber-js";
 import Sidebar from "@/components/Sidebar";
 import VisitingCardFace from "@/components/VisitingCardFace";
 import { validateCardField, validateCardFields, type CardField, type CardFieldErrors } from "@/lib/card-validation";
+import {
+  DEFAULT_CARD_ACCENT,
+  DEFAULT_CARD_BACKGROUND,
+  DEFAULT_COMPANY,
+  DEFAULT_COMPANY_LOGO,
+  DEFAULT_WEBSITE,
+} from "@/lib/card-defaults";
 
 const countryNames = new Intl.DisplayNames(["en"], { type: "region" });
 const countryCodes = getCountries()
@@ -18,9 +25,9 @@ const countryCodes = getCountries()
   .sort((left, right) => left.country.localeCompare(right.country));
 
 const initialForm = {
-  fullName: "", designation: "", company: "", countryCode: "+91", mobile: "", email: "",
-  address: "", website: "", linkedin: "", logoData: "",
-  backgroundColor: "#17191f", accentColor: "#d6ad55",
+  fullName: "", designation: "", company: DEFAULT_COMPANY, countryCode: "+91", mobile: "", email: "",
+  address: "", website: DEFAULT_WEBSITE, linkedin: "", logoData: DEFAULT_COMPANY_LOGO,
+  backgroundColor: DEFAULT_CARD_BACKGROUND, accentColor: DEFAULT_CARD_ACCENT,
 };
 
 export default function CreateCardPage() {
@@ -51,14 +58,14 @@ export default function CreateCardPage() {
           ...initialForm,
           fullName: result.fullName,
           designation: result.designation,
-          company: result.company,
+          company: DEFAULT_COMPANY,
           countryCode: result.countryCode || "+91",
           mobile: result.mobile,
           email: result.email,
           address: result.address || "",
-          website: result.website || "",
+          website: DEFAULT_WEBSITE,
           linkedin: result.linkedin || "",
-          logoData: result.logoData || "",
+          logoData: DEFAULT_COMPANY_LOGO,
           backgroundColor: result.backgroundColor || initialForm.backgroundColor,
           accentColor: result.accentColor || initialForm.accentColor,
         });
@@ -68,6 +75,7 @@ export default function CreateCardPage() {
   }, []);
 
   function update(field: keyof typeof initialForm, value: string) {
+    if (field === "company" || field === "website") return;
     if (field === "fullName") {
       value = value.replace(/[^\p{L}\p{M} ]/gu, "");
     }
@@ -81,28 +89,6 @@ export default function CreateCardPage() {
         [field]: validateCardField(field, value),
       }));
     }
-  }
-
-  function uploadLogo(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
-      setFieldErrors((current) => ({ ...current, logoData: "Please choose a PNG, JPEG, or WebP image." }));
-      event.target.value = "";
-      return;
-    }
-    if (file.size > 500 * 1024) {
-      setFieldErrors((current) => ({ ...current, logoData: "Logo must be 500 KB or smaller." }));
-      event.target.value = "";
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      update("logoData", String(reader.result || ""));
-      setFieldErrors((current) => ({ ...current, logoData: undefined }));
-    };
-    reader.onerror = () => setFieldErrors((current) => ({ ...current, logoData: "Unable to read the selected logo." }));
-    reader.readAsDataURL(file);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -255,17 +241,55 @@ export default function CreateCardPage() {
 
                 const Icon = field.icon;
                 const fieldError = fieldErrors[field.key];
-                return <label key={field.key} className={field.key === "address" ? "sm:col-span-2" : ""}><span className="mb-2 block text-sm font-semibold text-slate-700">{field.label}{field.required && <span className="text-red-500"> *</span>}</span><div className={`flex items-center rounded-xl border bg-slate-50 px-3 focus-within:bg-white focus-within:ring-4 focus-within:ring-blue-500/10 ${fieldError ? "border-red-500" : "border-slate-200 focus-within:border-blue-500"}`}><Icon size={17} className="shrink-0 text-slate-400" /><input aria-invalid={Boolean(fieldError)} aria-describedby={fieldError ? `${field.key}-error` : undefined} className="w-full bg-transparent px-3 py-3 text-sm outline-none placeholder:text-slate-400" type={field.type || "text"} required={field.required} maxLength={field.maxLength} value={form[field.key]} onChange={(e) => update(field.key, e.target.value)} onBlur={(e) => setFieldErrors((current) => ({ ...current, [field.key]: validateCardField(field.key, e.target.value) }))} placeholder={field.placeholder} /></div>{fieldError && <span id={`${field.key}-error`} className="mt-1 block text-xs text-red-600">{fieldError}</span>}</label>;
+                const isFixed = field.key === "company" || field.key === "website";
+                return <label key={field.key} className={field.key === "address" ? "sm:col-span-2" : ""}>
+                  <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700">{field.label}{field.required && <span className="text-red-500"> *</span>}{isFixed && <span className="text-xs font-normal text-slate-400">Fixed</span>}</span>
+                  <div className={`flex items-start rounded-xl border bg-slate-50 px-3 focus-within:bg-white focus-within:ring-4 focus-within:ring-blue-500/10 ${fieldError ? "border-red-500" : "border-slate-200 focus-within:border-blue-500"}`}>
+                    <Icon size={17} className="mt-3 shrink-0 text-slate-400" />
+                    {field.key === "address" ? (
+                      <textarea
+                        id={field.key}
+                        aria-invalid={Boolean(fieldError)}
+                        aria-describedby={fieldError ? `${field.key}-error` : undefined}
+                        className="min-h-28 w-full resize-y bg-transparent px-3 py-3 text-sm outline-none placeholder:text-slate-400"
+                        maxLength={field.maxLength}
+                        value={form.address}
+                        onChange={(event) => update("address", event.target.value)}
+                        onBlur={(event) => setFieldErrors((current) => ({ ...current, address: validateCardField("address", event.target.value) }))}
+                        placeholder={field.placeholder}
+                        rows={4}
+                      />
+                    ) : (
+                      <input
+                        id={field.key}
+                        aria-invalid={Boolean(fieldError)}
+                        aria-describedby={fieldError ? `${field.key}-error` : undefined}
+                        className={`w-full bg-transparent px-3 py-3 text-sm outline-none placeholder:text-slate-400 ${isFixed ? "cursor-not-allowed text-slate-600" : ""}`}
+                        type={field.type || "text"}
+                        required={field.required}
+                        readOnly={isFixed}
+                        maxLength={field.maxLength}
+                        value={form[field.key]}
+                        onChange={(event) => update(field.key, event.target.value)}
+                        onBlur={(event) => setFieldErrors((current) => ({ ...current, [field.key]: validateCardField(field.key, event.target.value) }))}
+                        placeholder={field.placeholder}
+                      />
+                    )}
+                  </div>
+                  {fieldError && <span id={`${field.key}-error`} className="mt-1 block text-xs text-red-600">{fieldError}</span>}
+                </label>;
               })}
             </div>
             <div className="mt-8 border-t border-slate-100 pt-6">
               <h3 className="text-base font-bold text-slate-900">Card branding & customization</h3>
-              <p className="mt-1 text-sm text-slate-500">Upload your company logo and choose the card colours.</p>
+              <p className="mt-1 text-sm text-slate-500">The company logo is fixed. Choose the card colours.</p>
               <div className="mt-5 grid gap-5 sm:grid-cols-2">
                 <label className="sm:col-span-2">
-                  <span className="mb-2 block text-sm font-semibold text-slate-700">Company logo <span className="font-normal text-slate-400">(optional, max 500 KB)</span></span>
-                  <input type="file" accept="image/png,image/jpeg,image/webp" onChange={uploadLogo} aria-describedby={fieldErrors.logoData ? "logoData-error" : undefined} className="block w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white" />
-                  {fieldErrors.logoData && <span id="logoData-error" className="mt-1 block text-xs text-red-600">{fieldErrors.logoData}</span>}
+                  <span className="mb-2 block text-sm font-semibold text-slate-700">Company logo <span className="font-normal text-slate-400">(fixed)</span></span>
+                  <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <img src={DEFAULT_COMPANY_LOGO} alt="Brihaspathi Technologies logo" className="h-12 w-12 rounded-lg bg-white object-contain p-1" />
+                    <span className="text-sm text-slate-600">Brihaspathi Technologies</span>
+                  </div>
                 </label>
                 <label>
                   <span className="mb-2 block text-sm font-semibold text-slate-700">Card background</span>
@@ -301,7 +325,6 @@ export default function CreateCardPage() {
               email={form.email}
               address={form.address}
               website={form.website}
-              logoData={form.logoData}
               backgroundColor={form.backgroundColor}
               accentColor={form.accentColor}
               showPlaceholders

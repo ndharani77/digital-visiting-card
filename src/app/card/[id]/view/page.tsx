@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import QRCodeDownloads from "@/components/QRCodeDownloads";
 import VisitingCardFace from "@/components/VisitingCardFace";
 import type { VisitingCard } from "@/lib/types";
 
@@ -34,7 +35,7 @@ export default function VisitingCardPreviewPage({ params }: { params: Promise<{ 
         <Link href="/" className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-blue-600"><ArrowLeft size={16} />Back to dashboard</Link>
         <div className="mb-5"><h1 className="text-2xl font-bold text-slate-900">Visiting Card Preview</h1><p className="mt-1 text-sm text-slate-500">Scan the QR code to open this contact card and choose Save Contact or WhatsApp.</p></div>
         <VisitingCardFace {...card} qrUrl={qrUrl} linksClickable />
-        <p className="mt-4 text-center text-xs text-slate-500">The QR code opens this card online. The phone must be able to reach this website.</p>
+        <QRCodeDownloads name={card.fullName} value={qrUrl} />
       </div>
     </main>
   );

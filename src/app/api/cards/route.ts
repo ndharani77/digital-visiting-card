@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { addCard, getCards } from "@/lib/store";
 import { validateCardFields } from "@/lib/card-validation";
+import {
+  DEFAULT_CARD_ACCENT,
+  DEFAULT_CARD_BACKGROUND,
+  DEFAULT_COMPANY,
+  DEFAULT_COMPANY_LOGO,
+  DEFAULT_WEBSITE,
+} from "@/lib/card-defaults";
 
 export const runtime = "nodejs";
 
@@ -25,6 +32,9 @@ export async function POST(request: Request) {
     }
     const data = body as Record<string, unknown>;
     if (data.countryCode === undefined) data.countryCode = "+91";
+    data.company = DEFAULT_COMPANY;
+    data.logoData = DEFAULT_COMPANY_LOGO;
+    data.website = DEFAULT_WEBSITE;
     const errors = validateCardFields(data);
     if (Object.keys(errors).length > 0) {
       const message = Object.values(errors)[0];
@@ -36,16 +46,16 @@ export async function POST(request: Request) {
     const card = await addCard({
       fullName: String(data.fullName).trim(),
       designation: String(data.designation).trim(),
-      company: String(data.company).trim(),
+      company: DEFAULT_COMPANY,
       countryCode: String(data.countryCode).trim(),
       mobile: String(data.mobile).trim(),
       email: String(data.email).trim(),
       address: optionalText("address"),
-      website: optionalText("website"),
+      website: DEFAULT_WEBSITE,
       linkedin: optionalText("linkedin"),
-      logoData: typeof data.logoData === "string" ? data.logoData.trim() : "",
-      backgroundColor: typeof data.backgroundColor === "string" && data.backgroundColor.trim() ? data.backgroundColor.trim() : "#17191f",
-      accentColor: typeof data.accentColor === "string" && data.accentColor.trim() ? data.accentColor.trim() : "#d6ad55",
+      logoData: DEFAULT_COMPANY_LOGO,
+      backgroundColor: typeof data.backgroundColor === "string" && data.backgroundColor.trim() ? data.backgroundColor.trim() : DEFAULT_CARD_BACKGROUND,
+      accentColor: typeof data.accentColor === "string" && data.accentColor.trim() ? data.accentColor.trim() : DEFAULT_CARD_ACCENT,
     });
     return NextResponse.json(card, { status: 201 });
   } catch {

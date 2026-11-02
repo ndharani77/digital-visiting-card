@@ -4,8 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Building2, Globe, Mail, MapPin, Phone, Linkedin, MessageCircle, Share2, Facebook, Link2, UserPlus, X } from "lucide-react";
 import VisitingCardFace from "@/components/VisitingCardFace";
+import QRCodeDownloads from "@/components/QRCodeDownloads";
+import CompanyProfile from "@/components/CompanyProfile";
 import type { VisitingCard } from "@/lib/types";
 import { createVCard } from "@/lib/vcard";
+import {
+  DEFAULT_CARD_ACCENT,
+} from "@/lib/card-defaults";
 
 export default function PublicCardPage({ params }: { params: Promise<{ id: string }> }) {
   const [card, setCard] = useState<VisitingCard | null>(null);
@@ -94,36 +99,37 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
   const phoneNumber = `${card.countryCode || "+91"} ${card.mobile}`;
   const phoneHref = `${card.countryCode || "+91"}${card.mobile}`;
   const whatsappNumber = phoneHref.replace(/\D/g, "");
-
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-12">
-      <div className="mx-auto max-w-xl">
+      <div className={`mx-auto ${isQrVisit ? "max-w-4xl" : "max-w-xl"}`}>
         <Link href="/" className="mb-5 inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-blue-600"><ArrowLeft size={16} />Back to dashboard</Link>
         {isQrVisit ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
-            <div className="px-6 py-7 text-white" style={{ backgroundColor: card.backgroundColor || "#17191f" }}>
-              <div className="mb-4 flex items-center gap-3">
-                {card.logoData ? <img src={card.logoData} alt={`${card.company} logo`} className="h-10 w-10 rounded-md bg-white object-contain p-1" /> : <Building2 size={25} style={{ color: card.accentColor || "#d6ad55" }} />}
-                <p className="text-sm font-bold uppercase tracking-wide" style={{ color: card.accentColor || "#d6ad55" }}>{card.company}</p>
+            <div className="px-6 py-7" style={{ backgroundColor: DEFAULT_CARD_ACCENT, color: "#ffffff" }}>
+              <div className="mb-5 flex h-16 w-full items-center justify-start">
+                <img
+                  src="/brihaspathi-brand-cropped.jpg"
+                  alt="Brihaspathi Technologies"
+                  className="h-16 max-w-full object-contain"
+                />
               </div>
-              <p className="text-xs font-semibold uppercase tracking-[.18em]" style={{ color: card.accentColor || "#d6ad55" }}></p>
               <h1 className="mt-2 text-2xl font-bold">{card.fullName}</h1>
-              <p className="mt-1 text-sm text-slate-300">{card.designation}</p>
+              <p className="mt-1 text-sm text-blue-100">{card.designation}</p>
             </div>
 
             <div className="p-6 sm:p-8">
               <div className="space-y-5">
                 <div className="flex items-start gap-3">
-                  <Phone size={19} className="mt-0.5 shrink-0" style={{ color: card.accentColor || "#d6ad55" }} />
-                  <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Mobile</p><a href={`tel:${phoneHref}`} className="mt-1 block break-all text-sm font-medium text-slate-800">{phoneNumber}</a></div>
+                  <Phone size={19} className="mt-0.5 shrink-0" style={{ color: DEFAULT_CARD_ACCENT }} />
+                  <div className="min-w-0"><a href={`tel:${phoneHref}`} className="block break-all text-sm font-bold" style={{ color: DEFAULT_CARD_ACCENT }}>{phoneNumber}</a></div>
                 </div>
                 <div className="flex items-start gap-3">
-                  <Mail size={19} className="mt-0.5 shrink-0" style={{ color: card.accentColor || "#d6ad55" }} />
-                  <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Email</p><a href={`mailto:${card.email}`} className="mt-1 block break-all text-sm font-medium text-slate-800">{card.email}</a></div>
+                  <Mail size={19} className="mt-0.5 shrink-0" style={{ color: DEFAULT_CARD_ACCENT }} />
+                  <div className="min-w-0"><a href={`mailto:${card.email}`} className="block break-all text-sm font-bold" style={{ color: DEFAULT_CARD_ACCENT }}>{card.email}</a></div>
                 </div>
-                {card.address && <div className="flex items-start gap-3"><MapPin size={19} className="mt-0.5 shrink-0" style={{ color: card.accentColor || "#d6ad55" }} /><div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Address</p><p className="mt-1 text-sm text-slate-800">{card.address}</p></div></div>}
-                {card.website && <div className="flex items-start gap-3"><Globe size={19} className="mt-0.5 shrink-0" style={{ color: card.accentColor || "#d6ad55" }} /><div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Website</p><a href={card.website} target="_blank" rel="noopener noreferrer" className="mt-1 block break-all text-sm font-medium text-black hover:underline">{card.website}</a></div></div>}
-                {card.linkedin && <div className="flex items-start gap-3"><Linkedin size={19} className="mt-0.5 shrink-0" style={{ color: card.accentColor || "#d6ad55" }} /><div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">LinkedIn</p><a href={card.linkedin} target="_blank" rel="noopener noreferrer" className="mt-1 block break-all text-sm font-medium text-black hover:underline">View LinkedIn profile</a></div></div>}
+                {card.address && <div className="flex items-start gap-3"><MapPin size={19} className="mt-0.5 shrink-0" style={{ color: DEFAULT_CARD_ACCENT }} /><div className="min-w-0"><a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(card.address)}`} target="_blank" rel="noopener noreferrer" className="block whitespace-pre-line text-sm hover:underline" style={{ color: DEFAULT_CARD_ACCENT }}>{card.address}</a></div></div>}
+                {card.website && <div className="flex items-start gap-3"><Globe size={19} className="mt-0.5 shrink-0" style={{ color: DEFAULT_CARD_ACCENT }} /><div className="min-w-0"><a href={card.website} target="_blank" rel="noopener noreferrer" className="block break-all text-sm font-medium hover:underline" style={{ color: DEFAULT_CARD_ACCENT }}>{card.website.replace(/^https?:\/\//i, "").replace(/\/$/, "")}</a></div></div>}
+                {card.linkedin && <div className="flex items-start gap-3"><Linkedin size={19} className="mt-0.5 shrink-0" style={{ color: DEFAULT_CARD_ACCENT }} /><div className="min-w-0"><a href={card.linkedin} target="_blank" rel="noopener noreferrer" className="block break-all text-sm font-medium hover:underline" style={{ color: DEFAULT_CARD_ACCENT }}>View LinkedIn profile</a></div></div>}
               </div>
               <div className="mt-6 border-t border-slate-100 pt-6">
           <div className="flex flex-wrap justify-center gap-4">
@@ -157,6 +163,9 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
         ) : (
           <VisitingCardFace {...card} qrUrl={qrUrl} linksClickable />
         )}
+
+        {isQrVisit === false && <QRCodeDownloads name={card.fullName} value={qrUrl} />}
+        {isQrVisit && <CompanyProfile />}
 
         {shareOptionsOpen && <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 p-0 sm:items-center sm:p-4" onMouseDown={(event) => {
           if (event.target === event.currentTarget) setShareOptionsOpen(false);

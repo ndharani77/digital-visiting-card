@@ -1,3 +1,5 @@
+import { DEFAULT_COMPANY_LOGO } from "@/lib/card-defaults";
+
 export type CardField =
   | "fullName"
   | "designation"
@@ -110,6 +112,7 @@ export function validateCardField(field: CardField, rawValue: unknown): string |
       if (!isValidWebUrl(value)) return "Enter a valid LinkedIn profile URL beginning with http:// or https://.";
       break;
     case "logoData":
+      if (value === DEFAULT_COMPANY_LOGO) break;
       if (
         value.length > 700_000 ||
         !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(value)
