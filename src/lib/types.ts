@@ -9,6 +9,7 @@ export type VisitingCard = {
   address: string;
   website: string;
   linkedin: string;
+  linkedinName?: string;
   logoData?: string;
   backgroundColor?: string;
   accentColor?: string;

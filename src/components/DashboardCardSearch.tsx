@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ArrowUpRight, CreditCard, Search } from "lucide-react";
+import { ArrowRight, CreditCard, QrCode, Search } from "lucide-react";
 import CardActions from "@/components/CardActions";
 import type { VisitingCard } from "@/lib/types";
 
@@ -64,7 +64,7 @@ export default function DashboardCardSearch({ cards }: { cards: VisitingCard[] }
             {matchingCards.map((card) => (
               <article key={card.id} className="relative rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
                 <div className="absolute right-3 top-3 z-10"><CardActions cardId={card.id} cardName={card.fullName} /></div>
-                <Link href={`/card/${card.id}`} className="block">
+                <Link href={`/card/${card.id}/view`} className="block">
                   <div className="mb-5 flex items-start justify-between pr-10">
                     <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-700"><CreditCard size={22} /></div>
                     <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-medium text-green-700">Active</span>
@@ -72,7 +72,7 @@ export default function DashboardCardSearch({ cards }: { cards: VisitingCard[] }
                   <h3 className="font-bold">{card.fullName}</h3>
                   <p className="mt-1 text-sm text-slate-500">{card.designation} · {card.company}</p>
                   <p className="mt-4 text-sm text-slate-500">{card.email}</p>
-                  <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4 text-sm font-medium text-blue-600"><span>View digital card</span><ArrowUpRight size={17} /></div>
+                  <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4 text-sm font-medium text-blue-600"><span>View QR code</span><QrCode size={17} /></div>
                 </Link>
               </article>
             ))}

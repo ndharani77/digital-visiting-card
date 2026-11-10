@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message, errors }, { status: 400 });
     }
 
-    const optionalText = (field: "address" | "website" | "linkedin") =>
+    const optionalText = (field: "address" | "website" | "linkedin" | "linkedinName") =>
       typeof data[field] === "string" ? data[field].trim() : "";
     const card = await addCard({
       fullName: String(data.fullName).trim(),
@@ -53,6 +53,7 @@ export async function POST(request: Request) {
       address: optionalText("address"),
       website: DEFAULT_WEBSITE,
       linkedin: optionalText("linkedin"),
+      linkedinName: optionalText("linkedinName"),
       logoData: DEFAULT_COMPANY_LOGO,
       backgroundColor: typeof data.backgroundColor === "string" && data.backgroundColor.trim() ? data.backgroundColor.trim() : DEFAULT_CARD_BACKGROUND,
       accentColor: typeof data.accentColor === "string" && data.accentColor.trim() ? data.accentColor.trim() : DEFAULT_CARD_ACCENT,

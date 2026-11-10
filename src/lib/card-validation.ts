@@ -10,6 +10,7 @@ export type CardField =
   | "address"
   | "website"
   | "linkedin"
+  | "linkedinName"
   | "logoData"
   | "backgroundColor"
   | "accentColor";
@@ -26,6 +27,7 @@ const fieldLimits: Partial<Record<CardField, number>> = {
   address: 250,
   website: 2048,
   linkedin: 2048,
+  linkedinName: 100,
 };
 
 const requiredFields: CardField[] = ["fullName", "designation", "company", "countryCode", "mobile", "email"];
@@ -138,6 +140,7 @@ export function validateCardFields(data: Record<string, unknown>): CardFieldErro
     "address",
     "website",
     "linkedin",
+    "linkedinName",
     "logoData",
     "backgroundColor",
     "accentColor",

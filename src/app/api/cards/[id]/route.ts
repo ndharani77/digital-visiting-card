@@ -46,7 +46,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     }
 
     const { id } = await context.params;
-    const optionalText = (field: "address" | "website" | "linkedin") =>
+    const optionalText = (field: "address" | "website" | "linkedin" | "linkedinName") =>
       typeof data[field] === "string" ? data[field].trim() : "";
     const card = await updateCard(id, {
       fullName: String(data.fullName).trim(),
@@ -58,6 +58,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       address: optionalText("address"),
       website: DEFAULT_WEBSITE,
       linkedin: optionalText("linkedin"),
+      linkedinName: optionalText("linkedinName"),
       logoData: DEFAULT_COMPANY_LOGO,
       backgroundColor: typeof data.backgroundColor === "string" && data.backgroundColor.trim() ? data.backgroundColor.trim() : DEFAULT_CARD_BACKGROUND,
       accentColor: typeof data.accentColor === "string" && data.accentColor.trim() ? data.accentColor.trim() : DEFAULT_CARD_ACCENT,

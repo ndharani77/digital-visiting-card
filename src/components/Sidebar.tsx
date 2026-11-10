@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CreditCard, LayoutDashboard, Plus, QrCode, Users } from "lucide-react";
+import { CreditCard, Download, LayoutDashboard, Plus, Upload } from "lucide-react";
 
 export default function Sidebar() {
   return (
@@ -16,8 +16,8 @@ export default function Sidebar() {
       </nav>
       <p className="mb-4 mt-10 text-xs font-semibold uppercase tracking-wider text-slate-500">Management</p>
       <nav className="space-y-2">
-        <Link href="/my-cards" className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-slate-300 hover:bg-slate-800"><QrCode size={19} />QR Codes</Link>
-        <Link href="/my-cards" className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-slate-300 hover:bg-slate-800"><Users size={19} />Contacts / Cards</Link>
+        <Link href="/import-excel" className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-slate-300 hover:bg-slate-800"><Upload size={19} />Import from Excel</Link>
+        <Link href="/export-qr" className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-slate-300 hover:bg-slate-800"><Download size={19} />Export QR Codes</Link>
       </nav>
       <div className="mt-auto rounded-xl border border-slate-800 p-4">
         <p className="text-sm font-semibold">Card Reader Workspace</p>

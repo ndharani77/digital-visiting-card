@@ -82,7 +82,7 @@ export async function updateCard(
     const updatedCard: VisitingCard = {
       ...input,
       id,
-      createdAt: cards[index].createdAt,
+      createdAt: cards[index].createdAt, 
     };
     cards[index] = updatedCard;
     await writeCards(cards);

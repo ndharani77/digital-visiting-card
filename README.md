@@ -4,12 +4,14 @@ A working Next.js + TypeScript + Tailwind CSS project for creating digital visit
 
 ## Features included
 - Dashboard with live counts from stored cards
-- Create visiting card form with required-field and email validation
+- Contact details form with required-field and email validation
 - Stores card details in `data/cards.json`
 - My Cards listing
+- Import contacts from an Excel `.xlsx` workbook, validate rows, and generate a QR code for each saved contact
+- Select saved cards and export their full-name QR codes as PNG, JPG, or PDF files to a selected folder where supported, or as a ZIP download in other browsers
 - Edit or delete cards from the card actions menu
-- Public digital visiting card page
-- QR code that opens the public contact page with Save Contact and WhatsApp actions
+- QR code generated from saved contact details
+- Scanning the QR code opens the public contact page with Save Contact and WhatsApp actions
 - Save Contact action that opens native contact creation on Android and the contact share sheet on supported iOS browsers; the user must confirm saving
 - WhatsApp action that opens a chat with a prefilled greeting
 
@@ -33,10 +35,11 @@ A working Next.js + TypeScript + Tailwind CSS project for creating digital visit
 ## Test the workflow
 1. Click **Create Card**.
 2. Fill the required fields and submit.
-3. The app saves the card and opens its digital card page.
-4. Display the saved card's QR code on a screen or print it.
-5. Scan the QR code with a phone camera to open the public card page.
+3. The app saves the contact details and displays the QR code.
+4. Display the QR code on a screen or print it.
+5. Scan the QR code with a phone camera to open the same public contact page.
 6. Choose **Save Contact** or **WhatsApp**. Save Contact opens the phone's contact creation/sharing flow; review the details and confirm Save in Contacts. Websites cannot write to a phone's contacts without user confirmation. WhatsApp opens a chat with this contact.
+7. To import multiple contacts, choose **Import from Excel** in Management, download the template, fill it in Excel, and upload the `.xlsx` workbook. Review the rows and import valid contacts; each saved row links to its QR code.
 
 ## Data storage note
 This starter uses a JSON file (`data/cards.json`) so it runs locally without requiring a separate database installation. It is suitable for local development and a single persistent Node.js server. For production deployments with multiple instances/serverless hosting, replace this file store with PostgreSQL or another persistent database.
