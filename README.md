@@ -1,4 +1,4 @@
-# Cardify — Complete Digital Visiting Card Starter
+# Card Reader — Complete Digital Visiting Card Starter
 
 A working Next.js + TypeScript + Tailwind CSS project for creating digital visiting cards, opening a public card page from a QR code, and sharing contact details.
 
