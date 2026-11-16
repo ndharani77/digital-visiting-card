@@ -90,13 +90,3 @@ Cards are stored in `data/cards.json`. The app creates this file if it does not 
 This file-based store is suitable for local development and a single persistent Node.js server. It is not suitable for serverless deployments, multiple application instances, or environments with ephemeral filesystems. For those deployments, use a shared persistent database.
 
 To open a card from another device, the device must be able to reach the server. `localhost` only refers to the current device; use a deployed public address or a LAN address reachable by the phone.
-
-## Current limitations
-
-- There is no login or role-based access control.
-- Card data is stored in a local JSON file rather than a database.
-- Saving contacts depends on browser and device support and always requires user confirmation.
-- The enquiry form opens the visitor's email application; it does not send or store enquiries on the server.
-- WhatsApp and social sharing links depend on the corresponding app or website being available.
-
-
