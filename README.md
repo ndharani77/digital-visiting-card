@@ -16,13 +16,12 @@ A digital visiting card application built with Next.js, TypeScript, and Tailwind
 ### QR codes and contact pages
 
 - Generate a unique QR code and shareable contact page for each saved card.
-- View the QR code from a saved card and download it individually as PNG, JPG, or PDF.
+- View a card's QR code and download it individually as a PNG, JPG, or PDF.
 - Scan a QR code to open a mobile-friendly contact page with the person's contact details and company profile.
 - Use contact shortcuts to call, email, open the office address in Google Maps, visit the company website, or open the LinkedIn profile.
 - Add a contact by sharing/downloading a vCard (`.vcf`) file. The user must confirm saving in their contacts app.
 - Start a WhatsApp chat with a prefilled greeting.
 - Share the card link with the device's native share sheet, or use the available WhatsApp, Facebook, X, LinkedIn, and email links; copy the card link when needed.
-- Download QR codes in bulk as PNG, JPG, or PDF files. Where browser folder access is supported, save files to a selected folder; otherwise download a ZIP archive.
 
 ### Company profile and enquiries
 
@@ -36,8 +35,16 @@ A digital visiting card application built with Next.js, TypeScript, and Tailwind
 - Download a CSV template for preparing contact details in a spreadsheet.
 - Import `.xlsx` workbooks; the first worksheet must have **Full Name**, **Designation**, **Mobile**, and **Email** columns.
 - Optionally include **Country Code**, **Office Address**, and **LinkedIn Profile**. Missing country codes default to `+91`; company and website use the app defaults.
-- Preview imported rows and their validation results before saving. Only valid rows can be imported.
+- Review the imported people and validation results before creating cards. Select or deselect individual valid rows, or use **Select all valid** and **Deselect all**. Invalid rows cannot be selected.
+- Valid rows are selected by default. The import button shows how many are selected and creates cards only for those selected contacts.
 - Each imported contact is saved as a card with its own QR code.
+
+### Bulk QR code export
+
+- Open **Export QR Codes** to choose which saved cards to export. Select individual cards or use **Select all** and **Deselect all**.
+- Choose PNG, JPG, or PDF. The export includes only the selected cards, with files named after each contact.
+- In supported secure browsers, choose a folder and save the files there. Otherwise, the application downloads one ZIP containing the selected QR code files.
+- The export view reports progress and any files that could not be created.
 
 ### Responsive interface
 

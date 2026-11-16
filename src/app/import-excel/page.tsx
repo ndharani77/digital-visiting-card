@@ -29,6 +29,7 @@ type ImportRow = {
   rowNumber: number;
   contact: ContactDetails;
   errors: string[];
+  selected: boolean;
   cardId?: string;
   saveError?: string;
 };
@@ -156,7 +157,8 @@ export default function ImportExcelPage() {
         .filter(({ row }) => row.some((value) => text(value) !== ""))
         .map(({ row, rowNumber }) => {
           const contact = contactFromRow(row, headerIndexes);
-          return { rowNumber, contact, errors: rowErrors(contact) };
+          const errors = rowErrors(contact);
+          return { rowNumber, contact, errors, selected: errors.length === 0 };
         });
       if (importedRows.length === 0) throw new Error("No contact rows were found in the first worksheet.");
       setRows(importedRows);
@@ -169,7 +171,7 @@ export default function ImportExcelPage() {
   }
 
   async function importContacts() {
-    const pendingRows = rows.filter((row) => row.errors.length === 0 && !row.cardId);
+    const pendingRows = rows.filter((row) => row.selected && row.errors.length === 0 && !row.cardId);
     if (pendingRows.length === 0) return;
 
     setSaving(true);
@@ -204,7 +206,17 @@ export default function ImportExcelPage() {
   }
 
   const validCount = rows.filter((row) => row.errors.length === 0 && !row.cardId).length;
+  const selectedCount = rows.filter((row) => row.selected && row.errors.length === 0 && !row.cardId).length;
   const savedCount = rows.filter((row) => Boolean(row.cardId)).length;
+  const allValidSelected = validCount > 0 && selectedCount === validCount;
+
+  function toggleAllValidRows() {
+    setRows((current) => current.map((row) =>
+      row.errors.length === 0 && !row.cardId
+        ? { ...row, selected: !allValidSelected }
+        : row
+    ));
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -223,6 +235,9 @@ export default function ImportExcelPage() {
                 <h2 className="font-bold text-slate-900">Prepare your spreadsheet</h2>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
                   The first worksheet must have Full Name, Designation, Mobile, and Email columns. Country Code, Office Address, and LinkedIn Profile are optional. Missing country codes default to +91; company and website use the app defaults.
+                </p>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+                  After upload, select only the valid contacts you want to turn into cards. Invalid rows cannot be selected.
                 </p>
               </div>
               <button type="button" onClick={downloadTemplate} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
@@ -244,23 +259,40 @@ export default function ImportExcelPage() {
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h2 className="font-bold text-slate-900">Import preview</h2>
-                    <p className="mt-1 text-sm text-slate-500">{rows.length} rows · {validCount} ready · {savedCount} saved</p>
+                    <p className="mt-1 text-sm text-slate-500">{rows.length} rows · {selectedCount} selected · {validCount} valid · {savedCount} saved</p>
                   </div>
-                  <button type="button" onClick={() => { void importContacts(); }} disabled={saving || validCount === 0} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
-                    <Upload size={16} />{saving ? "Importing..." : `Import ${validCount} contacts`}
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={toggleAllValidRows} disabled={saving || validCount === 0} className="inline-flex min-h-11 items-center rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
+                      {allValidSelected ? "Deselect all" : "Select all valid"}
+                    </button>
+                    <button type="button" onClick={() => { void importContacts(); }} disabled={saving || selectedCount === 0} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+                      <Upload size={16} />{saving ? "Importing..." : `Import ${selectedCount} selected`}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto rounded-xl border border-slate-200">
                   <table className="w-full min-w-[700px] text-left text-sm">
                     <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                      <tr><th className="px-4 py-3">Excel row</th><th className="px-4 py-3">Name</th><th className="px-4 py-3">Phone</th><th className="px-4 py-3">Email</th><th className="px-4 py-3">Status</th></tr>
+                      <tr><th className="px-4 py-3">Select</th><th className="px-4 py-3">Excel row</th><th className="px-4 py-3">Name</th><th className="px-4 py-3">Phone</th><th className="px-4 py-3">Email</th><th className="px-4 py-3">Status</th></tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {rows.map((row) => {
                         const status = row.cardId ? "Saved" : row.saveError ? row.saveError : row.errors.length ? row.errors.join(" ") : "Ready";
                         return (
                           <tr key={row.rowNumber}>
+                            <td className="px-4 py-3">
+                              <input
+                                type="checkbox"
+                                aria-label={`Select ${row.contact.fullName || `Excel row ${row.rowNumber}`}`}
+                                checked={row.selected}
+                                disabled={saving || row.errors.length > 0 || Boolean(row.cardId)}
+                                onChange={(event) => setRows((current) => current.map((item) =>
+                                  item.rowNumber === row.rowNumber ? { ...item, selected: event.target.checked } : item
+                                ))}
+                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-600 disabled:cursor-not-allowed"
+                              />
+                            </td>
                             <td className="px-4 py-3 text-slate-500">{row.rowNumber}</td>
                             <td className="px-4 py-3 font-medium text-slate-900">{row.contact.fullName || "—"}</td>
                             <td className="px-4 py-3 text-slate-600">{row.contact.countryCode} {row.contact.mobile}</td>
