@@ -59,9 +59,4 @@ This file-based store is suitable for local development and a single persistent 
 
 To open a card from another device, the device must be able to reach the server. `localhost` only refers to the current device; use a deployed public address or a LAN address reachable by the phone.
 
-## Current limitations
 
-- There is no login or role-based access control.
-- Card data is stored in a local JSON file rather than a database.
-- Saving contacts depends on browser and device support and always requires user confirmation.
-- WhatsApp links open in the WhatsApp app when available, or in WhatsApp Web.
