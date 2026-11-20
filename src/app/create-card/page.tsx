@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { ArrowLeft, Building2, Globe, Mail, MapPin, Phone, UserRound, Linkedin, Save } from "lucide-react";
 import { getCountries, getCountryCallingCode } from "libphonenumber-js";
@@ -13,6 +13,15 @@ import {
   DEFAULT_COMPANY_LOGO,
   DEFAULT_WEBSITE,
 } from "@/lib/card-defaults";
+import type { UserRole } from "@/lib/types";
+
+type BranchOption = {
+  id: string;
+  name: string;
+  code: string;
+  city: string;
+  status: "active" | "inactive";
+};
 
 const countryNames = new Intl.DisplayNames(["en"], { type: "region" });
 const countryCodes = getCountries()
@@ -35,43 +44,100 @@ export default function CreateCardPage() {
   const [loading, setLoading] = useState(false);
   const [loadingCard, setLoadingCard] = useState(false);
   const [editingId, setEditingId] = useState("");
+  const [companySettingsLoaded, setCompanySettingsLoaded] = useState(false);
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [branches, setBranches] = useState<BranchOption[]>([]);
+  const [branchId, setBranchId] = useState("");
+  const [branchesLoaded, setBranchesLoaded] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<CardFieldErrors>({});
   const [countryPickerOpen, setCountryPickerOpen] = useState(false);
   const [countrySearch, setCountrySearch] = useState("");
+  const countryPickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!countryPickerOpen) return;
+
+    function closeOnOutsideClick(event: PointerEvent) {
+      if (event.target instanceof Node && !countryPickerRef.current?.contains(event.target)) {
+        setCountryPickerOpen(false);
+        setCountrySearch("");
+      }
+    }
+
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
+  }, [countryPickerOpen]);
 
   function countryFlag(iso: string) {
     return String.fromCodePoint(...[...iso].map((letter) => letter.charCodeAt(0) + 127397));
   }
 
   useEffect(() => {
-    const cardId = new URLSearchParams(window.location.search).get("id");
-    if (!cardId) return;
+    async function loadForm() {
+      const cardId = new URLSearchParams(window.location.search).get("id");
+      if (cardId) {
+        setEditingId(cardId);
+        setLoadingCard(true);
+      }
 
-    setEditingId(cardId);
-    setLoadingCard(true);
-    fetch(`/api/cards/${encodeURIComponent(cardId)}`)
-      .then(async (response) => {
+      try {
+        const sessionResponse = await fetch("/api/auth/session");
+        const session = await sessionResponse.json();
+        if (!sessionResponse.ok) throw new Error(session.message || "Unable to load account details.");
+        const role = session.user?.role as UserRole;
+        const companyId = role === "SUPER_ADMIN"
+          ? session.activeCompanyId
+          : session.user?.companyId;
+        setUserRole(role);
+
+        if (role !== "EMPLOYEE" && typeof companyId === "string" && companyId) {
+          const branchesResponse = await fetch(`/api/companies/${encodeURIComponent(companyId)}/branches`);
+          const branchResult = await branchesResponse.json();
+          if (!branchesResponse.ok) throw new Error(branchResult.message || "Unable to load company branches.");
+          setBranches(branchResult as BranchOption[]);
+        }
+        setBranchesLoaded(true);
+
+        const settingsResponse = await fetch("/api/company");
+        const settings = await settingsResponse.json();
+        if (!settingsResponse.ok) throw new Error(settings.message || "Unable to load company settings.");
+        setForm((current) => ({
+          ...current,
+          company: settings.companyName,
+          website: settings.website,
+          logoData: settings.logoData,
+        }));
+        setCompanySettingsLoaded(true);
+
+        if (!cardId) return;
+        const response = await fetch(`/api/cards/${encodeURIComponent(cardId)}`);
         const result = await response.json();
         if (!response.ok) throw new Error(result.message || "Unable to load card.");
         setForm({
           ...initialForm,
           fullName: result.fullName,
           designation: result.designation,
-          company: DEFAULT_COMPANY,
+          company: settings.companyName,
           countryCode: result.countryCode || "+91",
           mobile: result.mobile,
           email: result.email,
           address: result.address || "",
-          website: DEFAULT_WEBSITE,
+          website: settings.website,
           linkedin: result.linkedin || "",
           linkedinName: result.linkedinName || "",
-          logoData: DEFAULT_COMPANY_LOGO,
+          logoData: settings.logoData,
           backgroundColor: result.backgroundColor || initialForm.backgroundColor,
           accentColor: result.accentColor || initialForm.accentColor,
         });
-      })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Unable to load card."))
-      .finally(() => setLoadingCard(false));
+        setBranchId(typeof result.branchId === "string" ? result.branchId : "");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unable to load card.");
+      } finally {
+        setLoadingCard(false);
+      }
+    }
+
+    void loadForm();
   }, []);
 
   function update(field: keyof typeof initialForm, value: string) {
@@ -99,10 +165,13 @@ export default function CreateCardPage() {
     if (Object.keys(validationErrors).length > 0) return;
     setLoading(true);
     try {
+      const payload = userRole && userRole !== "EMPLOYEE"
+        ? { ...form, branchId: branchId || null }
+        : form;
       const response = await fetch(editingId ? `/api/cards/${encodeURIComponent(editingId)}` : "/api/cards", {
         method: editingId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || "Unable to create card.");
@@ -126,15 +195,41 @@ export default function CreateCardPage() {
   ];
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen flex-col md:flex-row">
       <Sidebar />
-      <main className="min-w-0 flex-1 p-5 md:p-8">
-        <div className="mb-7"><Link href="/" className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-blue-600"><ArrowLeft size={16} />Back to dashboard</Link><h1 className="text-2xl font-bold">{editingId ? "Edit Contact Details" : "Create a QR Code"}</h1><p className="mt-1 text-sm text-slate-500">{editingId ? "Update the contact details linked to this QR code." : "Enter contact details to generate a QR code. Scanning it opens the contact page."}</p></div>
+      <main className="min-w-0 flex-1 p-5 md:p-8 xl:p-10">
+        <div className="mb-7">
+          <Link href="/" className="mb-5 inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-blue-700"><ArrowLeft size={16} />Back to dashboard</Link>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700">Card setup</p>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">{editingId ? "Edit card details" : "Create a digital card"}</h1>
+          <p className="mt-2 text-sm text-slate-500">{editingId ? "Update the contact details shown on this card." : "Enter contact details to create a digital card and QR code."}</p>
+        </div>
         <div className="mx-auto max-w-4xl">
-          <form noValidate onSubmit={submit} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+          <form noValidate onSubmit={submit} className="create-card-form rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
             {loadingCard && <p role="status" className="mb-5 rounded-lg bg-blue-50 p-3 text-sm text-blue-700">Loading card details...</p>}
             <div className="mb-6"><h2 className="text-lg font-bold">Personal & professional information</h2><p className="mt-1 text-sm text-slate-500">Fields marked with * are required.</p></div>
             <div className="grid gap-5 sm:grid-cols-2">
+              {userRole && userRole !== "EMPLOYEE" && (
+                <label className="sm:col-span-2">
+                  <span className="mb-2 block text-sm font-semibold text-slate-700">Branch <span className="font-normal text-slate-400">Optional</span></span>
+                  <select
+                    value={branchId}
+                    onChange={(event) => setBranchId(event.target.value)}
+                    disabled={!branchesLoaded}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-800 outline-none focus:border-blue-600 disabled:opacity-60"
+                  >
+                    <option value="">No branch — company-wide</option>
+                    {branches.filter((branch) => branch.status === "active" || branch.id === branchId).map((branch) => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.name}{branch.city ? ` · ${branch.city}` : ""}{branch.status === "inactive" ? " (inactive)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="mt-1 block text-xs text-slate-500">
+                    Create and manage branches from Company Management → Branches.
+                  </span>
+                </label>
+              )}
               {fields.map((field) => {
                 if (field.key === "mobile") {
                   const countryCodeError = fieldErrors.countryCode;
@@ -146,16 +241,15 @@ export default function CreateCardPage() {
                   return (
                     <div key="phone-fields">
                       <label htmlFor="mobile" className="mb-2 block text-sm font-semibold text-slate-700">{field.label}<span className="text-red-500"> *</span></label>
-                      <div className={`flex min-w-0 items-center rounded-xl border bg-slate-50 focus-within:bg-white focus-within:ring-4 focus-within:ring-blue-500/10 ${fieldErrors.mobile || countryCodeError ? "border-red-500" : "border-slate-200 focus-within:border-blue-500"}`}>
-                        <div className="relative shrink-0">
+                      <div className={`flex min-w-0 items-center rounded-xl border bg-slate-50 ${fieldErrors.mobile || countryCodeError ? "border-red-500" : "border-slate-200"}`}>
+                        <div ref={countryPickerRef} className="relative shrink-0">
                           <button
                             type="button"
                             aria-label="Choose country calling code"
                             aria-haspopup="listbox"
                             aria-expanded={countryPickerOpen}
-                            aria-invalid={Boolean(countryCodeError)}
                             aria-describedby={countryCodeError ? "countryCode-error" : undefined}
-                            className="flex h-11 min-w-[96px] items-center justify-center gap-1.5 rounded-l-xl border-r border-slate-200 bg-transparent px-2 text-sm outline-none hover:bg-slate-100"
+                            className="flex h-11 min-w-[96px] items-center justify-center gap-1.5 rounded-l-xl border-r border-slate-200 bg-transparent px-2 text-sm outline-none focus:outline-none hover:bg-slate-100"
                             onClick={() => { setCountryPickerOpen((open) => !open); setCountrySearch(""); }}
                           >
                             <span aria-hidden="true">{selectedCountry ? countryFlag(selectedCountry.iso) : "🌐"}</span>
@@ -166,7 +260,7 @@ export default function CreateCardPage() {
                             <input
                               autoFocus
                               aria-label="Search countries"
-                              className="w-full border-b border-slate-200 px-3 py-2.5 text-sm outline-none"
+                              className="w-full border-b border-slate-200 px-3 py-2.5 text-sm outline-none focus:outline-none"
                               value={countrySearch}
                               onChange={(event) => setCountrySearch(event.target.value)}
                               placeholder="Search country or code"
@@ -178,7 +272,7 @@ export default function CreateCardPage() {
                                   type="button"
                                   role="option"
                                   aria-selected={code === form.countryCode}
-                                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-slate-100"
+                                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm outline-none focus:outline-none hover:bg-slate-100"
                                   onClick={() => {
                                     update("countryCode", code);
                                     setCountryPickerOpen(false);
@@ -195,7 +289,7 @@ export default function CreateCardPage() {
                                 type="button"
                                 role="option"
                                 aria-selected={isCustomCountryCode}
-                                className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-slate-100"
+                                className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm outline-none focus:outline-none hover:bg-slate-100"
                                 onClick={() => {
                                   update("countryCode", "");
                                   setCountryPickerOpen(false);
@@ -211,7 +305,7 @@ export default function CreateCardPage() {
                           aria-label="Custom country calling code"
                           aria-invalid={Boolean(countryCodeError)}
                           aria-describedby={countryCodeError ? "countryCode-error" : undefined}
-                          className="h-11 w-[84px] shrink-0 border-r border-slate-200 bg-transparent px-2 text-sm outline-none"
+                          className="h-11 w-[84px] shrink-0 border-r border-slate-200 bg-transparent px-2 text-sm outline-none focus:outline-none"
                           inputMode="tel"
                           maxLength={4}
                           value={form.countryCode}
@@ -223,7 +317,7 @@ export default function CreateCardPage() {
                           id="mobile"
                           aria-invalid={Boolean(fieldErrors.mobile)}
                           aria-describedby={fieldErrors.mobile ? "mobile-error" : undefined}
-                          className="h-11 min-w-0 w-full rounded-r-xl bg-transparent px-3 text-sm outline-none placeholder:text-slate-400"
+                          className="h-11 min-w-0 w-full rounded-r-xl bg-transparent px-3 text-sm outline-none focus:outline-none placeholder:text-slate-400"
                           type="tel"
                           inputMode="tel"
                           required
@@ -245,14 +339,14 @@ export default function CreateCardPage() {
                 const isFixed = field.key === "company" || field.key === "website";
                 return <label key={field.key} className={field.key === "address" ? "sm:col-span-2" : ""}>
                   <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700">{field.label}{field.required && <span className="text-red-500"> *</span>}{isFixed && <span className="text-xs font-normal text-slate-400">Fixed</span>}</span>
-                  <div className={`flex items-start rounded-xl border bg-slate-50 px-3 focus-within:bg-white focus-within:ring-4 focus-within:ring-blue-500/10 ${fieldError ? "border-red-500" : "border-slate-200 focus-within:border-blue-500"}`}>
+                  <div className={`flex items-start rounded-xl border bg-slate-50 px-3 ${fieldError ? "border-red-500" : "border-slate-200"}`}>
                     <Icon size={17} className="mt-3 shrink-0 text-slate-400" />
                     {field.key === "address" ? (
                       <textarea
                         id={field.key}
                         aria-invalid={Boolean(fieldError)}
                         aria-describedby={fieldError ? `${field.key}-error` : undefined}
-                        className="min-h-28 w-full resize-y bg-transparent px-3 py-3 text-sm outline-none placeholder:text-slate-400"
+                        className="min-h-28 w-full resize-y bg-transparent px-3 py-3 text-sm outline-none focus:outline-none placeholder:text-slate-400"
                         maxLength={field.maxLength}
                         value={form.address}
                         onChange={(event) => update("address", event.target.value)}
@@ -265,7 +359,7 @@ export default function CreateCardPage() {
                         id={field.key}
                         aria-invalid={Boolean(fieldError)}
                         aria-describedby={fieldError ? `${field.key}-error` : undefined}
-                        className={`w-full bg-transparent px-3 py-3 text-sm outline-none placeholder:text-slate-400 ${isFixed ? "cursor-not-allowed text-slate-600" : ""}`}
+                        className={`w-full bg-transparent px-3 py-3 text-sm outline-none focus:outline-none placeholder:text-slate-400 ${isFixed ? "cursor-not-allowed text-slate-600" : ""}`}
                         type={field.type || "text"}
                         required={field.required}
                         readOnly={isFixed}
@@ -282,7 +376,7 @@ export default function CreateCardPage() {
               })}
             </div>
             {error && <p role="alert" className="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-            <div className="mt-8 flex flex-wrap justify-end gap-3 border-t border-slate-100 pt-6"><Link href={editingId ? "/my-cards" : "/"} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancel</Link><button disabled={loading || loadingCard} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"><Save size={17} />{loading ? (editingId ? "Saving..." : "Generating...") : (editingId ? "Save Changes" : "Generate QR Code")}</button></div>
+            <div className="mt-8 flex flex-wrap justify-end gap-3 border-t border-slate-100 pt-6"><Link href={editingId ? "/my-cards" : "/"} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancel</Link><button disabled={loading || loadingCard || !companySettingsLoaded} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"><Save size={17} />{loading ? (editingId ? "Saving changes..." : "Creating card...") : (editingId ? "Save changes" : "Create card")}</button></div>
           </form>
         </div>
       </main>

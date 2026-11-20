@@ -177,6 +177,8 @@ export default function ImportExcelPage() {
     setSaving(true);
     setError("");
     let completed = 0;
+    let saved = 0;
+    let failed = 0;
     for (const row of pendingRows) {
       try {
         const response = await fetch("/api/cards", {
@@ -194,14 +196,18 @@ export default function ImportExcelPage() {
         const result = await response.json();
         if (!response.ok) throw new Error(result.message || "Unable to save this contact.");
         setRows((current) => current.map((item) => item === row ? { ...item, cardId: result.id } : item));
+        saved += 1;
       } catch (err) {
         setRows((current) => current.map((item) => item === row ? { ...item, saveError: err instanceof Error ? err.message : "Unable to save this contact." } : item));
+        failed += 1;
       } finally {
         completed += 1;
-        setProgress(`Saving contact ${completed} of ${pendingRows.length}...`);
+        setProgress(`Importing contact ${completed} of ${pendingRows.length}...`);
       }
     }
-    setProgress("Import finished. Open each saved QR code from this list or Contacts / Cards.");
+    setProgress(failed === 0
+      ? `${saved} ${saved === 1 ? "contact was" : "contacts were"} imported successfully. Open their QR codes here or find the cards in My Cards.`
+      : `${saved} ${saved === 1 ? "contact was" : "contacts were"} imported; ${failed} ${failed === 1 ? "contact could not" : "contacts could not"} be imported. Review the errors below and retry.`);
     setSaving(false);
   }
 
@@ -219,13 +225,14 @@ export default function ImportExcelPage() {
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen flex-col md:flex-row">
       <Sidebar />
-      <main className="min-w-0 flex-1 p-5 md:p-8">
+      <main className="min-w-0 flex-1 p-5 md:p-8 xl:p-10">
         <div className="mx-auto max-w-4xl">
           <Link href="/" className="mb-5 inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-blue-600"><ArrowLeft size={16} />Back to dashboard</Link>
           <header className="mb-7">
-            <h1 className="text-2xl font-bold">Import Contacts from Excel</h1>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700">Bulk management</p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Import contacts</h1>
             <p className="mt-1 text-sm text-slate-500">Upload an .xlsx workbook to create contact cards and QR codes for each valid row.</p>
           </header>
 
@@ -266,7 +273,7 @@ export default function ImportExcelPage() {
                       {allValidSelected ? "Deselect all" : "Select all valid"}
                     </button>
                     <button type="button" onClick={() => { void importContacts(); }} disabled={saving || selectedCount === 0} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
-                      <Upload size={16} />{saving ? "Importing..." : `Import ${selectedCount} selected`}
+                      <Upload size={16} />{saving ? "Importing..." : `Import ${selectedCount} contacts`}
                     </button>
                   </div>
                 </div>

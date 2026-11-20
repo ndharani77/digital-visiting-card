@@ -1,65 +1,91 @@
 import { NextResponse } from "next/server";
-import { addCard, getCards } from "@/lib/store";
+import { authFailureResponse } from "@/lib/api-auth";
+import { requireUser } from "@/lib/auth";
 import { validateCardFields } from "@/lib/card-validation";
-import {
-  DEFAULT_CARD_ACCENT,
-  DEFAULT_CARD_BACKGROUND,
-  DEFAULT_COMPANY,
-  DEFAULT_COMPANY_LOGO,
-  DEFAULT_WEBSITE,
-} from "@/lib/card-defaults";
+import { BranchAssignmentError, getCompanySettings, getCardsForUser, createCardForUser } from "@/lib/platform-store";
+import { DEFAULT_CARD_ACCENT, DEFAULT_CARD_BACKGROUND } from "@/lib/card-defaults";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    return NextResponse.json(await getCards());
-  } catch {
+    const user = await requireUser();
+    return NextResponse.json(await getCardsForUser(user));
+  } catch (error) {
+    const authResponse = authFailureResponse(error);
+    if (authResponse) return authResponse;
+    console.error("Unable to read visiting cards:", error);
     return NextResponse.json({ message: "Unable to read visiting cards." }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
+  let user;
+  try {
+    user = await requireUser();
+  } catch (error) {
+    return authFailureResponse(error) ?? NextResponse.json({ message: "Unable to authenticate this request." }, { status: 500 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ message: "Request body must be valid JSON." }, { status: 400 });
   }
+
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ message: "Invalid request body." }, { status: 400 });
+  }
+
   try {
-    if (!body || typeof body !== "object" || Array.isArray(body)) {
-      return NextResponse.json({ message: "Invalid request body." }, { status: 400 });
-    }
     const data = body as Record<string, unknown>;
+    if ("companyId" in data) {
+      return NextResponse.json({ message: "Company is determined by the active workspace." }, { status: 400 });
+    }
+    if ("branchId" in data && data.branchId !== null && typeof data.branchId !== "string") {
+      return NextResponse.json({ message: "Choose a valid branch." }, { status: 400 });
+    }
     if (data.countryCode === undefined) data.countryCode = "+91";
-    data.company = DEFAULT_COMPANY;
-    data.logoData = DEFAULT_COMPANY_LOGO;
-    data.website = DEFAULT_WEBSITE;
+    const settings = await getCompanySettings(user);
+    data.company = settings.companyName;
+    data.logoData = settings.logoData;
+    data.website = settings.website;
     const errors = validateCardFields(data);
     if (Object.keys(errors).length > 0) {
       const message = Object.values(errors)[0];
       return NextResponse.json({ message, errors }, { status: 400 });
     }
 
-    const optionalText = (field: "address" | "website" | "linkedin" | "linkedinName") =>
+    const optionalText = (field: "address" | "linkedin" | "linkedinName") =>
       typeof data[field] === "string" ? data[field].trim() : "";
-    const card = await addCard({
+    const card = await createCardForUser(user, {
       fullName: String(data.fullName).trim(),
       designation: String(data.designation).trim(),
-      company: DEFAULT_COMPANY,
+      company: settings.companyName,
       countryCode: String(data.countryCode).trim(),
       mobile: String(data.mobile).trim(),
       email: String(data.email).trim(),
       address: optionalText("address"),
-      website: DEFAULT_WEBSITE,
+      website: settings.website,
       linkedin: optionalText("linkedin"),
       linkedinName: optionalText("linkedinName"),
-      logoData: DEFAULT_COMPANY_LOGO,
-      backgroundColor: typeof data.backgroundColor === "string" && data.backgroundColor.trim() ? data.backgroundColor.trim() : DEFAULT_CARD_BACKGROUND,
-      accentColor: typeof data.accentColor === "string" && data.accentColor.trim() ? data.accentColor.trim() : DEFAULT_CARD_ACCENT,
+      logoData: settings.logoData,
+      backgroundColor: DEFAULT_CARD_BACKGROUND,
+      accentColor: DEFAULT_CARD_ACCENT,
+      branchId: typeof data.branchId === "string" && data.branchId ? data.branchId : null,
     });
     return NextResponse.json(card, { status: 201 });
-  } catch {
-    return NextResponse.json({ message: "Unable to create visiting card." }, { status: 500 });
+  } catch (error) {
+    const authResponse = authFailureResponse(error);
+    if (authResponse) return authResponse;
+    if (error instanceof BranchAssignmentError) {
+      return NextResponse.json({ message: error.message }, { status: 400 });
+    }
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
+      return NextResponse.json({ message: "An employee with this email or employee code already exists in this company." }, { status: 409 });
+    }
+    console.error("Unable to create visiting card:", error);
+    return NextResponse.json({ message: error instanceof Error ? error.message : "Unable to create visiting card." }, { status: 500 });
   }
 }

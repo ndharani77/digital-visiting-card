@@ -1,6 +1,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { VisitingCard } from "@/lib/types";
+import type { CompanyPreviewSettings } from "@/lib/company-content";
+import { DEFAULT_CARD_ACCENT, DEFAULT_CARD_BACKGROUND } from "@/lib/card-defaults";
 
 const dataDirectory = path.join(process.cwd(), "data");
 const dataFile = path.join(dataDirectory, "cards.json");
@@ -32,7 +34,13 @@ async function ensureStore() {
 async function readCards(): Promise<VisitingCard[]> {
   await ensureStore();
   const content = await fs.readFile(dataFile, "utf8");
-  return JSON.parse(content) as VisitingCard[];
+  const cards = JSON.parse(content) as VisitingCard[];
+  return cards.map((card) => ({
+    ...card,
+    backgroundColor: DEFAULT_CARD_BACKGROUND,
+    accentColor: DEFAULT_CARD_ACCENT,
+    isActive: card.isActive !== false,
+  }));
 }
 
 export async function getCards(): Promise<VisitingCard[]> {
@@ -55,13 +63,16 @@ async function writeCards(cards: VisitingCard[]) {
 }
 
 export async function addCard(
-  input: Omit<VisitingCard, "id" | "createdAt">
+  input: Omit<VisitingCard, "id" | "createdAt" | "isActive" | "preview">
 ): Promise<VisitingCard> {
   return withStoreLock(async () => {
     const cards = await readCards();
     const card: VisitingCard = {
       ...input,
+      backgroundColor: DEFAULT_CARD_BACKGROUND,
+      accentColor: DEFAULT_CARD_ACCENT,
       id: crypto.randomUUID(),
+      isActive: true,
       createdAt: new Date().toISOString(),
     };
     cards.unshift(card);
@@ -72,7 +83,7 @@ export async function addCard(
 
 export async function updateCard(
   id: string,
-  input: Omit<VisitingCard, "id" | "createdAt">
+  input: Omit<VisitingCard, "id" | "createdAt" | "isActive" | "preview">
 ): Promise<VisitingCard | undefined> {
   return withStoreLock(async () => {
     const cards = await readCards();
@@ -82,11 +93,41 @@ export async function updateCard(
     const updatedCard: VisitingCard = {
       ...input,
       id,
+      backgroundColor: DEFAULT_CARD_BACKGROUND,
+      accentColor: DEFAULT_CARD_ACCENT,
+      isActive: cards[index].isActive,
       createdAt: cards[index].createdAt, 
+      preview: cards[index].preview,
     };
     cards[index] = updatedCard;
     await writeCards(cards);
     return updatedCard;
+  });
+}
+
+export async function setCardPreview(
+  id: string,
+  preview: CompanyPreviewSettings | undefined
+): Promise<VisitingCard | undefined> {
+  return withStoreLock(async () => {
+    const cards = await readCards();
+    const card = cards.find((item) => item.id === id);
+    if (!card) return undefined;
+    if (preview) card.preview = preview;
+    else delete card.preview;
+    await writeCards(cards);
+    return card;
+  });
+}
+
+export async function setCardActive(id: string, isActive: boolean): Promise<VisitingCard | undefined> {
+  return withStoreLock(async () => {
+    const cards = await readCards();
+    const card = cards.find((item) => item.id === id);
+    if (!card) return undefined;
+    card.isActive = isActive;
+    await writeCards(cards);
+    return card;
   });
 }
 

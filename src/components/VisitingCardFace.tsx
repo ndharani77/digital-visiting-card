@@ -5,7 +5,7 @@ import { DEFAULT_CARD_ACCENT, DEFAULT_CARD_BACKGROUND, DEFAULT_COMPANY_LOGO, get
 
 type VisitingCardFaceProps = Pick<
   VisitingCard,
-  "fullName" | "designation" | "company" | "countryCode" | "mobile" | "email" | "address" | "website" | "backgroundColor" | "accentColor"
+  "fullName" | "designation" | "company" | "countryCode" | "mobile" | "email" | "address" | "website" | "logoData" | "backgroundColor" | "accentColor"
 > & {
   qrUrl?: string;
   showPlaceholders?: boolean;
@@ -21,6 +21,7 @@ export default function VisitingCardFace({
   email,
   address,
   website,
+  logoData,
   backgroundColor,
   accentColor,
   qrUrl,
@@ -46,7 +47,7 @@ export default function VisitingCardFace({
       <div className="flex h-full gap-3 sm:gap-4">
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="mb-3 flex min-w-0 items-center gap-2">
-            <img src={DEFAULT_COMPANY_LOGO} alt={`${company || "Company"} logo`} className="h-8 w-8 shrink-0 rounded-md bg-white object-contain p-1" />
+            <img src={logoData || DEFAULT_COMPANY_LOGO} alt={`${company || "Company"} logo`} className="h-8 w-8 shrink-0 rounded-md bg-white object-contain p-1" />
             <div className="min-w-0">
               <p className="truncate text-[10px] font-extrabold uppercase tracking-wide sm:text-xs" style={{ color: accent }}>{company || (showPlaceholders ? "YOUR COMPANY" : "")}</p>
               <p className="text-[8px] sm:text-[9px]" style={{ color: textColors.secondary }}>Professional Business Card</p>

@@ -1,83 +1,146 @@
 import { NextResponse } from "next/server";
-import { deleteCard, getCard, updateCard } from "@/lib/store";
+import { authFailureResponse } from "@/lib/api-auth";
+import { requireUser } from "@/lib/auth";
 import { validateCardFields } from "@/lib/card-validation";
 import {
-  DEFAULT_CARD_ACCENT,
-  DEFAULT_CARD_BACKGROUND,
-  DEFAULT_COMPANY,
-  DEFAULT_COMPANY_LOGO,
-  DEFAULT_WEBSITE,
-} from "@/lib/card-defaults";
+  BranchAssignmentError,
+  deleteCardForUser,
+  getCardForUser,
+  getCompanySettings,
+  setCardActiveForUser,
+  updateCardForUser,
+} from "@/lib/platform-store";
 
 export const runtime = "nodejs";
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
-  const { id } = await context.params;
   try {
-    const card = await getCard(id);
+    const user = await requireUser();
+    const { id } = await context.params;
+    const card = await getCardForUser(user, id);
     if (!card) return NextResponse.json({ message: "Visiting card not found." }, { status: 404 });
     return NextResponse.json(card);
-  } catch {
+  } catch (error) {
+    const authResponse = authFailureResponse(error);
+    if (authResponse) return authResponse;
+    console.error("Unable to load visiting card:", error);
     return NextResponse.json({ message: "Unable to load visiting card." }, { status: 500 });
   }
 }
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
+  let user;
+  try {
+    user = await requireUser();
+  } catch (error) {
+    return authFailureResponse(error) ?? NextResponse.json({ message: "Unable to authenticate this request." }, { status: 500 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ message: "Request body must be valid JSON." }, { status: 400 });
   }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ message: "Invalid request body." }, { status: 400 });
+  }
 
   try {
-    if (!body || typeof body !== "object" || Array.isArray(body)) {
-      return NextResponse.json({ message: "Invalid request body." }, { status: 400 });
-    }
-
+    const { id } = await context.params;
+    const current = await getCardForUser(user, id);
+    if (!current) return NextResponse.json({ message: "Visiting card not found." }, { status: 404 });
+    const settings = await getCompanySettings(user, current.companyId);
     const data = body as Record<string, unknown>;
+    if ("branchId" in data && user.role === "EMPLOYEE") {
+      return NextResponse.json({ message: "Only company administrators can change a card's branch." }, { status: 403 });
+    }
+    if ("branchId" in data && data.branchId !== null && typeof data.branchId !== "string") {
+      return NextResponse.json({ message: "Choose a valid branch." }, { status: 400 });
+    }
     if (data.countryCode === undefined) data.countryCode = "+91";
-    data.company = DEFAULT_COMPANY;
-    data.logoData = DEFAULT_COMPANY_LOGO;
-    data.website = DEFAULT_WEBSITE;
+    data.company = settings.companyName;
+    data.logoData = settings.logoData;
+    data.website = settings.website;
     const errors = validateCardFields(data);
     if (Object.keys(errors).length > 0) {
       return NextResponse.json({ message: Object.values(errors)[0], errors }, { status: 400 });
     }
 
-    const { id } = await context.params;
-    const optionalText = (field: "address" | "website" | "linkedin" | "linkedinName") =>
+    const optionalText = (field: "address" | "linkedin" | "linkedinName") =>
       typeof data[field] === "string" ? data[field].trim() : "";
-    const card = await updateCard(id, {
+    const card = await updateCardForUser(user, id, {
       fullName: String(data.fullName).trim(),
       designation: String(data.designation).trim(),
-      company: DEFAULT_COMPANY,
       countryCode: String(data.countryCode).trim(),
       mobile: String(data.mobile).trim(),
       email: String(data.email).trim(),
       address: optionalText("address"),
-      website: DEFAULT_WEBSITE,
       linkedin: optionalText("linkedin"),
       linkedinName: optionalText("linkedinName"),
-      logoData: DEFAULT_COMPANY_LOGO,
-      backgroundColor: typeof data.backgroundColor === "string" && data.backgroundColor.trim() ? data.backgroundColor.trim() : DEFAULT_CARD_BACKGROUND,
-      accentColor: typeof data.accentColor === "string" && data.accentColor.trim() ? data.accentColor.trim() : DEFAULT_CARD_ACCENT,
+      ...(Object.prototype.hasOwnProperty.call(data, "branchId")
+        ? { branchId: typeof data.branchId === "string" && data.branchId ? data.branchId : null }
+        : {}),
     });
-
     if (!card) return NextResponse.json({ message: "Visiting card not found." }, { status: 404 });
     return NextResponse.json(card);
-  } catch {
+  } catch (error) {
+    const authResponse = authFailureResponse(error);
+    if (authResponse) return authResponse;
+    if (error instanceof BranchAssignmentError) {
+      return NextResponse.json({ message: error.message }, { status: 400 });
+    }
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
+      return NextResponse.json({ message: "An employee with this email or employee code already exists in this company." }, { status: 409 });
+    }
+    console.error("Unable to update visiting card:", error);
     return NextResponse.json({ message: "Unable to update visiting card." }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  let user;
+  try {
+    user = await requireUser();
+  } catch (error) {
+    return authFailureResponse(error) ?? NextResponse.json({ message: "Unable to authenticate this request." }, { status: 500 });
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ message: "Request body must be valid JSON." }, { status: 400 });
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body) ||
+      !("isActive" in body) || typeof body.isActive !== "boolean") {
+    return NextResponse.json({ message: "isActive must be a boolean." }, { status: 400 });
+  }
+
+  try {
+    const { id } = await context.params;
+    const card = await setCardActiveForUser(user, id, body.isActive);
+    if (!card) return NextResponse.json({ message: "Visiting card not found." }, { status: 404 });
+    return NextResponse.json(card);
+  } catch (error) {
+    const authResponse = authFailureResponse(error);
+    if (authResponse) return authResponse;
+    console.error("Unable to update visiting card status:", error);
+    return NextResponse.json({ message: "Unable to update visiting card status." }, { status: 500 });
   }
 }
 
 export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const user = await requireUser();
     const { id } = await context.params;
-    const deleted = await deleteCard(id);
+    const deleted = await deleteCardForUser(user, id);
     if (!deleted) return NextResponse.json({ message: "Visiting card not found." }, { status: 404 });
     return NextResponse.json({ success: true });
-  } catch {
+  } catch (error) {
+    const authResponse = authFailureResponse(error);
+    if (authResponse) return authResponse;
+    console.error("Unable to delete visiting card:", error);
     return NextResponse.json({ message: "Unable to delete visiting card." }, { status: 500 });
   }
 }

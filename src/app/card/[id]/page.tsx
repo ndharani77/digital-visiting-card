@@ -2,14 +2,149 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Globe, Mail, MapPin, Phone, Linkedin, MessageCircle, Share2, Facebook, Link2, UserPlus, X } from "lucide-react";
+import { ArrowLeft, Globe, LoaderCircle, Mail, MapPin, Phone, Linkedin, MessageCircle, Share2, Facebook, Link2, UserPlus, X } from "lucide-react";
 import VisitingCardFace from "@/components/VisitingCardFace";
 import QRCodeDownloads from "@/components/QRCodeDownloads";
 import CompanyProfile from "@/components/CompanyProfile";
+import CardPreviewPdfDownload from "@/components/CardPreviewPdfDownload";
 import type { VisitingCard } from "@/lib/types";
 import { createVCard } from "@/lib/vcard";
+import { isCompanyPreviewSettings, type CompanyPreviewSettings } from "@/lib/company-content";
+
+type CompanyBranding = { companyName: string; logoData: string };
+
+function oklabToRgb(lightness: number, a: number, b: number, alpha?: string) {
+  const l = lightness + 0.3963377774 * a + 0.2158037573 * b;
+  const m = lightness - 0.1055613458 * a - 0.0638541728 * b;
+  const s = lightness - 0.0894841775 * a - 1.291485548 * b;
+  const l3 = l * l * l;
+  const m3 = m * m * m;
+  const s3 = s * s * s;
+  const channels = [
+    4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3,
+    -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3,
+    -0.0041960863 * l3 - 0.7034186147 * m3 + 1.707614701 * s3,
+  ];
+  const toSrgb = (channel: number) => {
+    const linear = Math.max(0, Math.min(1, channel));
+    const srgb = linear <= 0.0031308 ? linear * 12.92 : 1.055 * linear ** (1 / 2.4) - 0.055;
+    return Math.round(srgb * 255);
+  };
+  const rgb = channels.map(toSrgb).join(" ");
+  if (!alpha) return `rgb(${rgb})`;
+  const opacity = alpha.endsWith("%") ? Number(alpha.slice(0, -1)) / 100 : Number(alpha);
+  return `rgb(${rgb} / ${Math.max(0, Math.min(1, opacity))})`;
+}
+
+function colorFunctionsToRgb(value: string) {
+  return value
+    .replace(/oklch\(([^()]*)\)/gi, (_color, components: string) => {
+      const [colorChannels, alpha] = components.split("/").map((part) => part.trim());
+      const [lightness, chroma, hue] = colorChannels.split(/\s+/).map(Number);
+      return oklabToRgb(lightness / 100, chroma * Math.cos(hue * Math.PI / 180), chroma * Math.sin(hue * Math.PI / 180), alpha);
+    })
+    .replace(/oklab\(([^()]*)\)/gi, (_color, components: string) => {
+      const [colorChannels, alpha] = components.split("/").map((part) => part.trim());
+      const [lightness, a, b] = colorChannels.split(/\s+/).map(Number);
+      return oklabToRgb(lightness, a, b, alpha);
+    })
+    .replace(/\s+in\s+oklab(?=[,)]|$)/gi, "");
+}
+
+async function createPreviewPdf(fileName: string) {
+  const pages = Array.from(document.querySelectorAll<HTMLElement>(".pdf-export-page"));
+  const servicePageCount = document.querySelectorAll(".company-profile-service-page").length;
+  if (servicePageCount === 0 || pages.length !== servicePageCount + 2) {
+    throw new Error("The full card preview is not ready to download.");
+  }
+  const exportRoot = document.querySelector<HTMLElement>(".public-card-page-content");
+  if (!exportRoot) throw new Error("The card preview is not ready to download.");
+
+  const images = pages.flatMap((page) => Array.from(page.querySelectorAll("img")));
+  images.forEach((image) => {
+    image.loading = "eager";
+  });
+  await Promise.all(images.map((image) => image.decode()));
+
+  const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+    import("html2canvas"),
+    import("jspdf"),
+  ]);
+  const rootStyle = getComputedStyle(document.documentElement);
+  const legacyColorTokens = Array.from(rootStyle)
+    .filter((property) => property.startsWith("--color-"))
+    .map((property) => [property, colorFunctionsToRgb(rootStyle.getPropertyValue(property).trim())] as const);
+  const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const margin = 12;
+  const colorProperties = [
+    "color",
+    "background-color",
+    "border-top-color",
+    "border-right-color",
+    "border-bottom-color",
+    "border-left-color",
+    "outline-color",
+    "text-decoration-color",
+    "caret-color",
+    "column-rule-color",
+    "-webkit-text-fill-color",
+    "-webkit-text-stroke-color",
+    "box-shadow",
+    "text-shadow",
+    "background-image",
+    "--tw-gradient-stops",
+    "--tw-gradient-via-stops",
+    "--tw-gradient-position",
+  ];
+
+  for (const [index, page] of pages.entries()) {
+    const canvas = await html2canvas(page, {
+      scale: 1.5,
+      useCORS: true,
+      allowTaint: false,
+      backgroundColor: "#ffffff",
+      imageTimeout: 15000,
+      logging: false,
+      onclone: (clonedDocument) => {
+        const clonedWindow = clonedDocument.defaultView;
+        if (!clonedWindow) return;
+        for (const [property, value] of legacyColorTokens) {
+          clonedDocument.documentElement.style.setProperty(property, value);
+        }
+        const clonedPage = clonedDocument.querySelectorAll<HTMLElement>(".pdf-export-page")[index];
+        if (!clonedPage) return;
+        const elements = [clonedPage, ...Array.from(clonedPage.querySelectorAll<HTMLElement | SVGElement>("*"))];
+        for (const element of elements) {
+          const computedStyle = clonedWindow.getComputedStyle(element);
+          for (const property of colorProperties) {
+            const value = computedStyle.getPropertyValue(property);
+            if (!/oklch|oklab/i.test(value)) continue;
+            const compatibleValue = colorFunctionsToRgb(value);
+            if (compatibleValue !== value) element.style.setProperty(property, compatibleValue);
+          }
+        }
+      },
+    });
+    const imageData = canvas.toDataURL("image/jpeg", 0.95);
+    const maxWidth = pageWidth - margin * 2;
+    const maxHeight = pageHeight - margin * 2;
+    const ratio = Math.min(maxWidth / canvas.width, maxHeight / canvas.height);
+    const imageWidth = canvas.width * ratio;
+    const imageHeight = canvas.height * ratio;
+
+    if (index > 0) pdf.addPage();
+    pdf.addImage(imageData, "JPEG", (pageWidth - imageWidth) / 2, margin, imageWidth, imageHeight);
+  }
+
+  pdf.save(fileName);
+}
+
 export default function PublicCardPage({ params }: { params: Promise<{ id: string }> }) {
   const [card, setCard] = useState<VisitingCard | null>(null);
+  const [companyPreview, setCompanyPreview] = useState<CompanyPreviewSettings | null>(null);
+  const [companyBranding, setCompanyBranding] = useState<CompanyBranding | null>(null);
   const [error, setError] = useState("");
   const [id, setId] = useState("");
   const [qrUrl, setQrUrl] = useState("");
@@ -18,6 +153,8 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
   const [contactMessage, setContactMessage] = useState("");
   const [shareOptionsOpen, setShareOptionsOpen] = useState(false);
   const [shareMessage, setShareMessage] = useState("");
+  const [isPdfLoading, setIsPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState("");
 
   useEffect(() => {
     params.then(({ id: cardId }) => {
@@ -29,15 +166,49 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
 
   useEffect(() => {
     if (!id) return;
-    fetch(`/api/cards/${id}`).then(async (response) => {
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.message || "Card not found.");
-      setCard(result as VisitingCard);
-    }).catch((err: unknown) => setError(err instanceof Error ? err.message : "Unable to load card."));
+    const qrVisit = new URLSearchParams(window.location.search).get("source") === "qr";
+    async function loadCard() {
+      try {
+        const response = await fetch(`/api/public/cards/${encodeURIComponent(id)}`);
+        const result: unknown = await response.json();
+        if (!response.ok) {
+          const message = result && typeof result === "object" && "message" in result && typeof result.message === "string"
+            ? result.message
+            : "Card not found.";
+          throw new Error(message);
+        }
+        if (!result || typeof result !== "object" || !("card" in result) || !("company" in result)) {
+          throw new Error("Visiting card details are invalid.");
+        }
+        const loadedCard = result.card as VisitingCard;
+        const company = result.company as {
+          companyName?: unknown;
+          logoData?: unknown;
+          preview?: unknown;
+        };
+        if (
+          typeof company.companyName !== "string" ||
+          typeof company.logoData !== "string" ||
+          !isCompanyPreviewSettings(company.preview)
+        ) {
+          throw new Error("Company branding details are invalid.");
+        }
+        if (loadedCard.preview !== undefined && !isCompanyPreviewSettings(loadedCard.preview)) {
+          throw new Error("Card preview details are invalid.");
+        }
+        setCard(loadedCard);
+        if (!qrVisit) return;
+        setCompanyPreview(loadedCard.preview ?? company.preview);
+        setCompanyBranding({ companyName: company.companyName, logoData: company.logoData });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unable to load card.");
+      }
+    }
+    void loadCard();
   }, [id]);
 
   async function shareCard() {
-    if (!card || !qrUrl) return;
+    if (!card?.isActive || !qrUrl) return;
     const shareData = {
       title: `${card.fullName} | Digital Visiting Card`,
       text: `Contact ${card.fullName}`,
@@ -58,7 +229,7 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
   }
 
   async function copyCardLink() {
-    if (!qrUrl) return;
+    if (!card?.isActive || !qrUrl) return;
     try {
       await navigator.clipboard.writeText(qrUrl);
       setShareMessage("Card link copied.");
@@ -68,7 +239,7 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
   }
 
   async function addToContacts() {
-    if (!card) return;
+    if (!card?.isActive) return;
     setContactError("");
     setContactMessage("");
     if (!window.confirm(`Continue to add ${card.fullName} to your contacts? Choose Contacts in the next screen, then tap Save or Done.`)) return;
@@ -77,7 +248,7 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
     const contactFile = new File([createVCard(card)], fileName, { type: "text/vcard" });
     if (!navigator.canShare?.({ files: [contactFile] })) {
       setContactMessage("Opening the contact file. Choose Contacts, then tap Save or Done to finish.");
-      window.location.assign(`/api/cards/${encodeURIComponent(id)}/vcf`);
+      window.location.assign(`/api/public/cards/${encodeURIComponent(id)}/vcf`);
       return;
     }
 
@@ -90,32 +261,48 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
     }
   }
 
+  async function downloadPreviewPdf() {
+    if (!card || isPdfLoading) return;
+    setPdfError("");
+    setIsPdfLoading(true);
+    document.body.classList.add("pdf-exporting");
+    try {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      await document.fonts.ready;
+      const safeName = card.fullName.trim().replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "");
+      await createPreviewPdf(`${safeName || "visiting-card"}-preview.pdf`);
+    } catch (err) {
+      console.error("Unable to create the visiting card PDF.", err);
+      setPdfError(err instanceof Error ? `Unable to create the PDF: ${err.message}` : "Unable to create the PDF. Please try again.");
+    } finally {
+      document.body.classList.remove("pdf-exporting");
+      setIsPdfLoading(false);
+    }
+  }
+
   if (error) return <main className="flex min-h-screen items-center justify-center p-6"><div className="rounded-2xl bg-white p-8 text-center shadow"><h1 className="text-xl font-bold">Card unavailable</h1><p className="mt-2 text-sm text-slate-500">{error}</p>{isQrVisit === false && <Link href="/" className="mt-5 inline-block text-blue-600">Back to dashboard</Link>}</div></main>;
   if (!card) return <main className="flex min-h-screen items-center justify-center text-sm text-slate-500">Loading digital visiting card...</main>;
+  if (isQrVisit && (!companyPreview || !companyBranding)) return <main className="flex min-h-screen items-center justify-center text-sm text-slate-500">Loading digital visiting card...</main>;
   const formattedMobile = card.mobile.replace(/^(\d{5})(\d{5})$/, "$1 $2");
   const phoneNumber = `${card.countryCode || "+91"} ${formattedMobile}`;
   const phoneHref = `${card.countryCode || "+91"}${card.mobile}`;
   const whatsappNumber = phoneHref.replace(/\D/g, "");
   return (
-    <main className={isQrVisit ? "min-h-screen bg-[#f3f6fa] px-3 py-6" : "min-h-screen bg-slate-50 px-4 py-12"}>
-      <div className={`mx-auto ${isQrVisit ? "max-w-[430px]" : "max-w-xl"}`}>
+    <main className={isQrVisit ? "public-card-page min-h-screen bg-[#f3f6fa] px-3 py-6" : "min-h-screen bg-slate-50 px-4 py-12"}>
+      {isPdfLoading && <div role="status" className="fixed inset-0 z-[100] flex items-center justify-center bg-white/85 text-sm font-semibold text-slate-700">
+        <LoaderCircle size={20} className="mr-2 animate-spin" aria-hidden="true" /> Preparing your PDF…
+      </div>}
+      <div className={`public-card-page-content mx-auto ${isQrVisit ? "max-w-[430px]" : "max-w-xl"}`}>
         {isQrVisit === false && <Link href="/" className="mb-5 inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-blue-600"><ArrowLeft size={16} />Back to dashboard</Link>}
         {isQrVisit ? (
-          <section className="relative mx-auto max-w-[430px] overflow-hidden rounded-[18px] border border-slate-200 bg-white shadow-[0_12px_36px_rgba(15,23,42,0.08)]">
+          <section className="pdf-export-page public-card-cover-pdf relative mx-auto max-w-[430px] overflow-hidden rounded-[18px] border border-slate-200 bg-white shadow-[0_12px_36px_rgba(15,23,42,0.08)]">
             <svg aria-hidden="true" className="pointer-events-none absolute right-0 top-0 h-[100px] w-[56%]" viewBox="0 0 240 112" preserveAspectRatio="none">
               <path d="M0 0h240v112C184 53 103 10 0 0Z" fill="#07518a" />
               <path d="M0 0C103 10 184 53 240 112" fill="none" stroke="#d8e6f2" strokeWidth="3" />
               <path d="M86 0C155 17 207 57 240 101" fill="none" stroke="#a9c5df" strokeWidth="2" />
             </svg>
-            <img
-              aria-hidden="true"
-              src="/brihaspathi-logo.png"
-              alt=""
-              className="pointer-events-none absolute -right-10 top-28 h-44 w-44 object-contain opacity-[0.07]"
-            />
-
             <header className="relative z-10 px-5 pt-5">
-              <img src="/brihaspathi-brand.webp" alt="Brihaspathi Technologies — The Guru of Tomorrow's Technology" className="h-10 w-[150px] max-w-full object-contain object-left" />
+              <img src={companyBranding?.logoData || "/brihaspathi-brand.webp"} alt={companyBranding?.companyName || "Company"} className="h-10 w-[150px] max-w-full object-contain object-left" />
             </header>
 
             <div className="relative z-10 mt-10 px-5">
@@ -130,50 +317,68 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
               <div className="flex items-center gap-3">
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#07518a] text-white"><Phone size={15} /></span>
                 <span className="h-7 w-px shrink-0 bg-slate-300" />
-                <a href={`tel:${phoneHref}`} className="min-w-0 break-all text-sm font-bold hover:underline">{phoneNumber}</a>
+                {card.isActive
+                  ? <a href={`tel:${phoneHref}`} className="min-w-0 break-all text-sm font-bold hover:underline">{phoneNumber}</a>
+                  : <span aria-disabled="true" className="min-w-0 break-all text-sm font-bold">{phoneNumber}</span>}
               </div>
               <div className="flex items-center gap-3">
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#07518a] text-white"><Mail size={15} /></span>
                 <span className="h-7 w-px shrink-0 bg-slate-300" />
-                <a href={`mailto:${card.email}`} className="min-w-0 break-all text-sm font-bold hover:underline">{card.email}</a>
+                {card.isActive
+                  ? <a href={`mailto:${card.email}`} className="min-w-0 break-all text-sm font-bold hover:underline">{card.email}</a>
+                  : <span aria-disabled="true" className="min-w-0 break-all text-sm font-bold">{card.email}</span>}
               </div>
               {card.address && <div className="flex items-start gap-3">
                 <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#07518a] text-white"><MapPin size={15} /></span>
                 <span className="mt-0.5 min-h-7 w-px shrink-0 self-stretch bg-slate-300" />
-                <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(card.address)}`} target="_blank" rel="noopener noreferrer" className="min-w-0 whitespace-pre-line text-sm leading-[1.4] hover:underline">{card.address}</a>
+                {card.isActive
+                  ? <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(card.address)}`} target="_blank" rel="noopener noreferrer" className="min-w-0 whitespace-pre-line text-sm leading-[1.4] hover:underline">{card.address}</a>
+                  : <span aria-disabled="true" className="min-w-0 whitespace-pre-line text-sm leading-[1.4]">{card.address}</span>}
               </div>}
               {card.website && <div className="flex items-center gap-3">
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#07518a] text-white"><Globe size={15} /></span>
                 <span className="h-7 w-px shrink-0 bg-slate-300" />
-                <a href={card.website} target="_blank" rel="noopener noreferrer" className="min-w-0 break-all text-sm hover:underline">{card.website.replace(/^https?:\/\//i, "").replace(/\/$/, "")}</a>
+                {card.isActive
+                  ? <a href={card.website} target="_blank" rel="noopener noreferrer" className="min-w-0 break-all text-sm hover:underline">{card.website.replace(/^https?:\/\//i, "").replace(/\/$/, "")}</a>
+                  : <span aria-disabled="true" className="min-w-0 break-all text-sm">{card.website.replace(/^https?:\/\//i, "").replace(/\/$/, "")}</span>}
               </div>}
               {card.linkedin && <div className="flex items-center gap-3">
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#07518a] text-white"><Linkedin size={15} /></span>
                 <span className="h-7 w-px shrink-0 bg-slate-300" />
-                <a href={card.linkedin} target="_blank" rel="noopener noreferrer" className="min-w-0 break-all text-sm hover:underline">{card.linkedinName?.trim() || card.fullName}</a>
+                {card.isActive
+                  ? <a href={card.linkedin} target="_blank" rel="noopener noreferrer" className="min-w-0 break-all text-sm hover:underline">{card.linkedinName?.trim() || card.fullName}</a>
+                  : <span aria-disabled="true" className="min-w-0 break-all text-sm">{card.linkedinName?.trim() || card.fullName}</span>}
               </div>}
             </div>
 
             <div className="relative z-10 mx-5 mt-5 border-t border-slate-200">
-              <div className="grid grid-cols-5 gap-y-4 py-4">
-                <a aria-label="Call" href={`tel:${phoneHref}`} className="flex min-w-0 flex-col items-center gap-1.5 px-0.5 text-[11px] font-medium text-slate-700 hover:text-[#07518a]">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-[#07518a]"><Phone size={18} /></span>Call
-                </a>
-                <button aria-label="Add contact" title="Add contact" type="button" onClick={addToContacts} className="flex min-w-0 flex-col items-center gap-1.5 px-0.5 text-[11px] font-medium text-slate-700 hover:text-[#07518a]">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-[#07518a]"><UserPlus size={18} /></span><span className="whitespace-nowrap">Add Contact</span>
+              <div className="card-contact-actions grid grid-cols-6 gap-y-4 py-4">
+                {card.isActive ? <a aria-label={companyPreview?.labels.call} href={`tel:${phoneHref}`} className="flex min-w-0 flex-col items-center gap-1.5 px-0.5 text-[11px] font-medium text-slate-700 hover:text-[#07518a]">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-[#07518a]"><Phone size={18} /></span>{companyPreview?.labels.call}
+                </a> : <span aria-disabled="true" className="flex min-w-0 flex-col items-center gap-1.5 px-0.5 text-[11px] font-medium text-slate-700">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-[#07518a]"><Phone size={18} /></span>{companyPreview?.labels.call}
+                </span>}
+                <button aria-label={companyPreview?.labels.addContact} title={companyPreview?.labels.addContact} type="button" onClick={addToContacts} disabled={!card.isActive} className="flex min-w-0 flex-col items-center gap-1.5 px-0.5 text-[11px] font-medium text-slate-700 hover:text-[#07518a] disabled:cursor-not-allowed disabled:opacity-60">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-[#07518a]"><UserPlus size={18} /></span><span className="whitespace-nowrap">{companyPreview?.labels.addContact}</span>
                 </button>
-                <a aria-label="WhatsApp" href={`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(`Hi ${card.fullName},\n\nI came across your digital visiting card and would like to connect with you. Looking forward to speaking with you.`)}`} target="_blank" rel="noreferrer" className="flex min-w-0 flex-col items-center gap-1.5 px-0.5 text-[11px] font-medium text-slate-700 hover:text-[#07518a]">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-[#07518a]"><MessageCircle size={18} /></span>WhatsApp
-                </a>
-                <a aria-label="Email" href={`mailto:${card.email}`} className="flex min-w-0 flex-col items-center gap-1.5 px-0.5 text-[11px] font-medium text-slate-700 hover:text-[#07518a]">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-[#07518a]"><Mail size={18} /></span>Email
-                </a>
-                <button aria-label="Share contact" type="button" onClick={() => { setShareOptionsOpen(true); setShareMessage(""); }} className="flex min-w-0 flex-col items-center gap-1.5 px-0.5 text-[11px] font-medium text-slate-700 hover:text-[#07518a]">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-[#07518a]"><Share2 size={18} /></span>Share
+                {card.isActive ? <a aria-label={companyPreview?.labels.whatsapp} href={`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(companyPreview?.whatsappMessage.replace(/\{name\}/gi, card.fullName) || "")}`} target="_blank" rel="noreferrer" className="flex min-w-0 flex-col items-center gap-1.5 px-0.5 text-[11px] font-medium text-slate-700 hover:text-[#07518a]">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-[#07518a]"><MessageCircle size={18} /></span>{companyPreview?.labels.whatsapp}
+                </a> : <span aria-disabled="true" className="flex min-w-0 flex-col items-center gap-1.5 px-0.5 text-[11px] font-medium text-slate-700">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-[#07518a]"><MessageCircle size={18} /></span>{companyPreview?.labels.whatsapp}
+                </span>}
+                {card.isActive ? <a aria-label={companyPreview?.labels.email} href={`mailto:${card.email}`} className="flex min-w-0 flex-col items-center gap-1.5 px-0.5 text-[11px] font-medium text-slate-700 hover:text-[#07518a]">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-[#07518a]"><Mail size={18} /></span>{companyPreview?.labels.email}
+                </a> : <span aria-disabled="true" className="flex min-w-0 flex-col items-center gap-1.5 px-0.5 text-[11px] font-medium text-slate-700">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-[#07518a]"><Mail size={18} /></span>{companyPreview?.labels.email}
+                </span>}
+                <button aria-label={companyPreview?.labels.share} type="button" disabled={!card.isActive} onClick={() => { setShareOptionsOpen(true); setShareMessage(""); }} className="flex min-w-0 flex-col items-center gap-1.5 px-0.5 text-[11px] font-medium text-slate-700 hover:text-[#07518a] disabled:cursor-not-allowed disabled:opacity-60">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-[#07518a]"><Share2 size={18} /></span>{companyPreview?.labels.share}
                 </button>
+                {card.isActive && companyBranding && <CardPreviewPdfDownload isLoading={isPdfLoading} onClick={downloadPreviewPdf} />}
               </div>
-              {contactError && <p role="alert" className="mb-3 text-center text-sm text-red-600">{contactError}</p>}
-              {contactMessage && <p role="status" className="mb-3 text-center text-sm text-slate-600">{contactMessage}</p>}
+              {card.isActive && pdfError && <p role="alert" className="card-action-feedback mb-3 text-center text-sm text-red-600">{pdfError}</p>}
+              {card.isActive && contactError && <p role="alert" className="card-action-feedback mb-3 text-center text-sm text-red-600">{contactError}</p>}
+              {card.isActive && contactMessage && <p role="status" className="card-action-feedback mb-3 text-center text-sm text-slate-600">{contactMessage}</p>}
             </div>
           </section>
         ) : (
@@ -181,11 +386,11 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
         )}
 
         {isQrVisit === false && <QRCodeDownloads name={card.fullName} value={qrUrl} />}
-        {isQrVisit && (
-          <CompanyProfile recipientEmail={card.email} />
+        {isQrVisit && companyPreview && (
+          <CompanyProfile recipientEmail={card.email} preview={companyPreview} isActive={card.isActive} />
         )}
 
-        {shareOptionsOpen && <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 p-0 sm:items-center sm:p-4" onMouseDown={(event) => {
+        {card.isActive && shareOptionsOpen && <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 p-0 sm:items-center sm:p-4" onMouseDown={(event) => {
           if (event.target === event.currentTarget) setShareOptionsOpen(false);
         }}>
           <section role="dialog" aria-modal="true" aria-labelledby="share-dialog-title" className="w-full max-w-md rounded-t-2xl bg-white p-6 shadow-2xl sm:rounded-2xl">
@@ -223,7 +428,9 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
           </section>
         </div>}
 
-        <p className="mt-5 text-center text-xs text-slate-400">Digital contact card · Powered by Card Reader</p>
+        {(isQrVisit ? companyPreview?.labels.footer : "Digital contact card · Powered by Card Reader") && (
+          <p className={`${isQrVisit ? "public-card-page-footer" : ""} mt-5 text-center text-xs text-slate-400`}>{isQrVisit ? companyPreview?.labels.footer : "Digital contact card · Powered by Card Reader"}</p>
+        )}
       </div>
     </main>
   );

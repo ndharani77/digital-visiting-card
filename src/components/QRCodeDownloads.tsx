@@ -56,7 +56,7 @@ function createPdf(jpegBytes: Uint8Array, imageSize: number) {
   return new Blob([pdf], { type: "application/pdf" });
 }
 
-export default function QRCodeDownloads({ name, value }: { name: string; value: string }) {
+export default function QRCodeDownloads({ name, value, className = "mt-5" }: { name: string; value: string; className?: string }) {
   const qrContainer = useRef<HTMLDivElement>(null);
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState<DownloadFormat | "">("");
@@ -114,7 +114,7 @@ export default function QRCodeDownloads({ name, value }: { name: string; value: 
   }
 
   return (
-    <section className="mt-5">
+    <section className={className}>
       <div className="relative inline-block">
         <button
           type="button"

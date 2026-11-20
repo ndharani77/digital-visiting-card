@@ -1,5 +1,13 @@
+import type { CompanyPreviewSettings } from "@/lib/company-content";
+
+export type UserRole = "SUPER_ADMIN" | "COMPANY_ADMIN" | "EMPLOYEE";
+
 export type VisitingCard = {
   id: string;
+  companyId?: string;
+  employeeId?: string;
+  branchId?: string;
+  branchName?: string;
   fullName: string;
   designation: string;
   company: string;
@@ -13,5 +21,7 @@ export type VisitingCard = {
   logoData?: string;
   backgroundColor?: string;
   accentColor?: string;
+  preview?: CompanyPreviewSettings;
+  isActive: boolean;
   createdAt: string;
 };
