@@ -1,44 +1,85 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import {
   Building2,
-  ChevronDown,
   CreditCard,
   Download,
   LayoutDashboard,
   LogOut,
   Menu,
+  Palette,
   Plus,
   Settings2,
   Upload,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import type { UserRole } from "@/lib/types";
+import { DEFAULT_COMPANY_THEME, isCompanyTheme } from "@/lib/company-theme";
+import {
+  DEFAULT_USER_PREFERENCES,
+  isAppLocale,
+  isDisplayDensity,
+  type AppLocale,
+} from "@/lib/user-preferences";
+import { translate, type MessageKey } from "@/lib/messages";
+import { WorkspaceLayoutContext } from "@/layout/WorkspaceLayoutContext";
 
 type SessionUser = { role: UserRole; email: string; companyId: string | null };
 type CompanyOption = { id: string; name: string };
+type CompanyBrand = { name: string; logoData: string };
+type NavigationItem = { href: string; label: string; messageKey: MessageKey | null; icon: LucideIcon };
 
-const navigation = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/my-cards", label: "My Cards", icon: CreditCard },
-  { href: "/create-card", label: "Create card", icon: Plus, adminOnly: true },
-  { href: "/import-excel", label: "Import contacts", icon: Upload, adminOnly: true },
-  { href: "/export-qr", label: "Export QR codes", icon: Download },
+function isCompanyBrand(value: unknown): value is CompanyBrand {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    "name" in value && typeof value.name === "string" &&
+    "logoData" in value && typeof value.logoData === "string"
+  );
+}
+
+const navigation: NavigationItem[] = [
+  { href: "/", label: "Dashboard", messageKey: "nav.dashboard", icon: LayoutDashboard },
+  { href: "/companies", label: "Companies", messageKey: null, icon: Building2 },
+  { href: "/my-cards", label: "Visiting Cards", messageKey: "nav.cards", icon: CreditCard },
+  { href: "/analytics", label: "Analytics", messageKey: null, icon: LayoutDashboard },
+  { href: "/change-password", label: "Settings", messageKey: "nav.settings", icon: Settings2 },
 ];
 
-const companyLinks = [
-  { href: "/company", label: "Card Branding" },
-  { href: "/company/preview-details", label: "Scan Page Content" },
+const companyNavigation: NavigationItem[] = [
+  { href: "/", label: "Dashboard", messageKey: "nav.dashboard", icon: LayoutDashboard },
+  { href: "/create-card", label: "Create card", messageKey: "nav.createCard", icon: Plus },
+  { href: "/my-cards", label: "Visiting Cards", messageKey: "nav.cards", icon: CreditCard },
+  { href: "/import-excel", label: "Import contacts", messageKey: "nav.importContacts", icon: Upload },
+  { href: "/export-qr", label: "QR Codes", messageKey: "nav.qrCodes", icon: Download },
+  { href: "/company", label: "Company Profile", messageKey: "nav.companyProfile", icon: Building2 },
+  { href: "/company/preview-details", label: "Preview Editing", messageKey: "nav.previewEditing", icon: Settings2 },
+  { href: "/settings", label: "Settings", messageKey: "nav.settings", icon: Palette },
 ];
 
-export default function Sidebar() {
+const employeeNavigation: NavigationItem[] = [
+  { href: "/", label: "Dashboard", messageKey: "nav.dashboard", icon: LayoutDashboard },
+  { href: "/my-cards", label: "My Cards", messageKey: "nav.cards", icon: CreditCard },
+  { href: "/export-qr", label: "QR Codes", messageKey: "nav.qrCodes", icon: Download },
+];
+
+export default function Sidebar({ persistent = false }: { persistent?: boolean }) {
+  const insideWorkspaceLayout = useContext(WorkspaceLayoutContext);
+  if (insideWorkspaceLayout && !persistent) return null;
+  return <SidebarContents />;
+}
+
+function SidebarContents() {
   const pathname = usePathname();
-  const [companyOpen, setCompanyOpen] = useState(pathname.startsWith("/company"));
   const [mobileOpen, setMobileOpen] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [locale, setLocale] = useState<AppLocale>(DEFAULT_USER_PREFERENCES.locale);
+  const [companyBrand, setCompanyBrand] = useState<CompanyBrand | null>(null);
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
   const [activeCompanyId, setActiveCompanyId] = useState<string | null>(null);
   const [switchingCompany, setSwitchingCompany] = useState(false);
@@ -47,6 +88,12 @@ export default function Sidebar() {
 
   useEffect(() => {
     let cancelled = false;
+    function handleBrandingUpdate(event: Event) {
+      if (event instanceof CustomEvent && isCompanyBrand(event.detail)) {
+        setCompanyBrand(event.detail);
+      }
+    }
+    window.addEventListener("company-branding-updated", handleBrandingUpdate);
     async function loadWorkspace() {
       try {
         const sessionResponse = await fetch("/api/auth/session");
@@ -55,23 +102,56 @@ export default function Sidebar() {
         if (cancelled) return;
         setUser(session.user as SessionUser);
         setActiveCompanyId(session.activeCompanyId);
+        const preferencesResponse = await fetch("/api/auth/preferences");
+        const preferences = await preferencesResponse.json();
+        if (!preferencesResponse.ok) throw new Error(preferences.message || "Unable to load personal preferences.");
+        if (isAppLocale(preferences.locale)) {
+          setLocale(preferences.locale);
+          document.documentElement.lang = preferences.locale;
+        }
+        if (isDisplayDensity(preferences.displayDensity)) {
+          document.documentElement.dataset.displayDensity = preferences.displayDensity;
+        }
+        const hasCompanyWorkspace = session.user.role === "COMPANY_ADMIN" ||
+          (session.user.role === "SUPER_ADMIN" && Boolean(session.activeCompanyId));
+        if (!hasCompanyWorkspace) {
+          document.documentElement.dataset.companyTheme = DEFAULT_COMPANY_THEME;
+          if (session.user.role === "EMPLOYEE") return;
+        }
 
         const companiesResponse = await fetch("/api/companies");
         const companyList = await companiesResponse.json();
         if (!companiesResponse.ok) throw new Error(companyList.message || "Unable to load companies.");
         if (!cancelled) setCompanies(companyList as CompanyOption[]);
+        if (hasCompanyWorkspace) {
+          const settingsResponse = await fetch("/api/company");
+          const settings = await settingsResponse.json();
+          if (!settingsResponse.ok) throw new Error(settings.message || "Unable to load company theme.");
+          if (typeof settings.companyName !== "string" ||
+              typeof settings.logoData !== "string" ||
+              !isCompanyTheme(settings.theme)) {
+            throw new Error("Company branding settings are invalid.");
+          }
+          if (!cancelled) {
+            setCompanyBrand({ name: settings.companyName, logoData: settings.logoData });
+            document.documentElement.dataset.companyTheme = settings.theme;
+          }
+        }
       } catch (error) {
         if (!cancelled) setAccountError(error instanceof Error ? error.message : "Unable to load the current account.");
       }
     }
     void loadWorkspace();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      window.removeEventListener("company-branding-updated", handleBrandingUpdate);
+      document.documentElement.dataset.companyTheme = DEFAULT_COMPANY_THEME;
+      document.documentElement.dataset.displayDensity = DEFAULT_USER_PREFERENCES.displayDensity;
+      document.documentElement.lang = DEFAULT_USER_PREFERENCES.locale;
+    };
   }, []);
 
-  useEffect(() => {
-    if (pathname.startsWith("/company")) setCompanyOpen(true);
-    setMobileOpen(false);
-  }, [pathname]);
+  useEffect(() => setMobileOpen(false), [pathname]);
 
   function isActive(href: string) {
     return href === "/" ? pathname === "/" : pathname === href;
@@ -89,13 +169,32 @@ export default function Sidebar() {
     }`;
   }
 
-  const isAdmin = user?.role === "SUPER_ADMIN" || user?.role === "COMPANY_ADMIN";
-  const canCreateForCompany = user?.role !== "SUPER_ADMIN" || activeCompanyId !== null;
-  const visibleNavigation = user
-    ? navigation.filter((item) => (!item.adminOnly || isAdmin) && (canCreateForCompany || item.href !== "/create-card" && item.href !== "/import-excel"))
-    : navigation.slice(0, 2);
-  const visibleCompanyLinks = isAdmin && (user?.role !== "SUPER_ADMIN" || activeCompanyId !== null) ? companyLinks : [];
-  const selectedCompanyName = companies.find((company) => company.id === activeCompanyId)?.name;
+  const isPlatformWideAdmin = user?.role === "SUPER_ADMIN" && !activeCompanyId;
+  const isCompanyWorkspace = user?.role === "COMPANY_ADMIN" ||
+    (user?.role === "SUPER_ADMIN" && activeCompanyId !== null);
+  const visibleNavigation = !user
+    ? employeeNavigation.slice(0, 2)
+    : isPlatformWideAdmin
+      ? navigation
+      : isCompanyWorkspace
+        ? companyNavigation
+        : employeeNavigation;
+  const translateNavigation = (label: string, key: MessageKey | null) =>
+    key ? translate(locale, key) : label;
+  const companyLogo = companyBrand?.logoData ? (
+    <Image
+      src={companyBrand.logoData}
+      alt={`${companyBrand.name} logo`}
+      width={44}
+      height={44}
+      unoptimized
+      className="h-full w-full rounded-xl object-contain"
+    />
+  ) : (
+    <CreditCard size={21} />
+  );
+  const brandName = companyBrand?.name || "Card Reader";
+  const brandSubtitle = companyBrand ? "Card Reader" : "Digital Business Cards";
 
   async function switchCompany(companyId: string) {
     setSwitchingCompany(true);
@@ -130,11 +229,19 @@ export default function Sidebar() {
 
   function companyControl(mobile = false) {
     if (!user || user.role === "EMPLOYEE") return null;
-    if (user.role !== "SUPER_ADMIN") {
+    if (user.role !== "SUPER_ADMIN") return null;
+    if (activeCompanyId) {
       return (
         <div className={`rounded-xl px-3 py-2 ${mobile ? "col-span-2 border border-slate-200 bg-slate-50" : "mb-5 border border-white/10 bg-white/[0.04]"}`}>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Company</p>
-          <p className={`mt-1 truncate text-sm font-medium ${mobile ? "text-slate-900" : "text-white"}`}>{selectedCompanyName || "Your company"}</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Company workspace</p>
+          <button
+            type="button"
+            disabled={switchingCompany}
+            onClick={() => void switchCompany("")}
+            className={`mt-1 text-xs font-semibold underline underline-offset-2 disabled:opacity-60 ${mobile ? "text-blue-700" : "text-blue-300"}`}
+          >
+            {switchingCompany ? "Changing workspace..." : "All workspaces"}
+          </button>
         </div>
       );
     }
@@ -157,57 +264,18 @@ export default function Sidebar() {
     );
   }
 
-  function companyManagementLink(mobile = false) {
-    if (!isAdmin) return null;
-    const href = user?.role === "SUPER_ADMIN"
-      ? "/companies"
-      : user?.companyId
-        ? `/companies/${encodeURIComponent(user.companyId)}`
-        : "/companies";
-    const label = user?.role === "SUPER_ADMIN" ? "Companies" : "Company access";
-    const active = pathname === href || (href !== "/companies" && pathname.startsWith(`${href}/`));
-    return (
-      <Link
-        href={href}
-        aria-current={active ? "page" : undefined}
-        className={`${mobile ? "flex min-h-12 items-center gap-2 rounded-xl px-3 py-2 text-sm" : `flex items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-medium transition-colors ${active ? "bg-blue-500/15 text-white ring-1 ring-inset ring-blue-400/20" : "text-slate-300 hover:bg-white/5 hover:text-white"}`} ${
-          mobile && active ? "bg-blue-50 text-blue-700" : mobile ? "text-slate-600 hover:bg-slate-50" : ""
-        }`}
-      >
-        <Settings2 size={18} />{label}
-      </Link>
-    );
-  }
-
-  function branchManagementLink(mobile = false) {
-    if (!isAdmin) return null;
-    const companyId = user?.role === "SUPER_ADMIN" ? activeCompanyId : user?.companyId;
-    if (!companyId) return null;
-    const href = `/companies/${encodeURIComponent(companyId)}/branches`;
-    const active = pathname === href;
-    return (
-      <Link
-        href={href}
-        aria-current={active ? "page" : undefined}
-        className={`${mobile ? "flex min-h-12 items-center gap-2 rounded-xl px-3 py-2 text-sm" : navClass(href)} ${
-          mobile && active ? "bg-blue-50 text-blue-700" : mobile ? "text-slate-600 hover:bg-slate-50" : ""
-        }`}
-      >
-        <Building2 size={18} />Branches
-      </Link>
-    );
-  }
-
   return (
     <>
       <header className="sticky top-0 z-40 flex h-[68px] items-center justify-between border-b border-slate-200/80 bg-white/95 px-4 backdrop-blur md:hidden">
-        <Link href="/" className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-sm shadow-blue-700/20">
-            <CreditCard size={21} />
+        <Link href="/" className="flex min-w-0 items-center gap-3">
+          <span className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl ${
+            companyBrand?.logoData ? "bg-white" : "bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-sm shadow-blue-700/20"
+          }`}>
+            {companyLogo}
           </span>
-          <span>
-            <span className="block text-sm font-bold tracking-tight text-slate-900">Card Reader</span>
-            <span className="block text-[11px] text-slate-500">Digital Business Cards</span>
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-bold tracking-tight text-slate-900">{brandName}</span>
+            <span className="block text-[11px] text-slate-500">{brandSubtitle}</span>
           </span>
         </Link>
         <button
@@ -226,7 +294,7 @@ export default function Sidebar() {
         <nav id="mobile-navigation" aria-label="Main navigation" className="absolute inset-x-0 top-[68px] z-40 border-b border-slate-200 bg-white p-3 shadow-xl md:hidden">
           <div className="grid grid-cols-2 gap-2">
             {companyControl(true)}
-            {visibleNavigation.map(({ href, label, icon: Icon }) => (
+            {visibleNavigation.map(({ href, label, messageKey, icon: Icon }) => (
               <Link
                 key={href}
                 href={href}
@@ -235,23 +303,9 @@ export default function Sidebar() {
                   isHighlighted(href) ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"
                 }`}
               >
-                <Icon size={18} />{label}
+                <Icon size={18} />{translateNavigation(label, messageKey ?? null)}
               </Link>
             ))}
-            {visibleCompanyLinks.map(({ href, label }) => (
-              <Link
-                key={href}
-                href={href}
-                aria-current={pathname === href ? "page" : undefined}
-                className={`flex min-h-12 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium ${
-                  pathname === href ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                <Building2 size={18} />{label}
-              </Link>
-            ))}
-            {companyManagementLink(true)}
-            {branchManagementLink(true)}
             <button type="button" onClick={() => void signOut()} disabled={signingOut} className="col-span-2 flex min-h-12 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60">
               <LogOut size={18} />{signingOut ? "Signing out..." : "Sign out"}
             </button>
@@ -260,79 +314,52 @@ export default function Sidebar() {
         </nav>
       )}
 
-      <aside className="sticky top-0 hidden h-screen w-[264px] shrink-0 flex-col bg-[#101b31] px-4 py-6 text-white md:flex">
-        <Link href="/" className="mb-6 flex items-center gap-3 px-2">
-          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 shadow-lg shadow-blue-950/30">
-            <CreditCard size={23} />
+      <aside style={{ backgroundColor: "var(--company-sidebar-background)" }} className="sticky top-0 hidden h-screen w-[264px] shrink-0 flex-col px-4 py-6 text-white md:flex">
+        <Link href="/" className="mb-6 flex min-w-0 items-center gap-3 px-2">
+          <span className={`flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl ${
+            companyBrand?.logoData ? "bg-white" : "bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-lg shadow-blue-950/30"
+          }`}>
+            {companyBrand?.logoData ? (
+              <Image
+                src={companyBrand.logoData}
+                alt={`${companyBrand.name} logo`}
+                width={44}
+                height={44}
+                unoptimized
+                className="h-full w-full object-contain"
+              />
+            ) : <CreditCard size={23} />}
           </span>
-          <span>
-            <span className="block text-[15px] font-bold tracking-tight">Card Reader</span>
-            <span className="mt-0.5 block text-[11px] text-slate-400">Digital Business Cards</span>
+          <span className="min-w-0">
+            <span className="block truncate text-[15px] font-bold tracking-tight">{brandName}</span>
+            <span className="mt-0.5 block text-[11px] text-slate-400">{brandSubtitle}</span>
           </span>
         </Link>
         {companyControl()}
         {accountError && <p role="alert" className="mb-3 px-2 text-xs text-red-300">{accountError}</p>}
 
-        <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Workspace</p>
-        <nav aria-label="Workspace" className="space-y-1">
-          {visibleNavigation.slice(0, 3).map(({ href, label, icon: Icon }) => (
+        <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+          {isPlatformWideAdmin ? "Platform" : "Workspace"}
+        </p>
+        <nav aria-label={isPlatformWideAdmin ? "Platform navigation" : "Workspace navigation"} className="space-y-1">
+          {visibleNavigation.map(({ href, label, messageKey, icon: Icon }) => (
             <Link key={href} href={href} aria-current={isActive(href) ? "page" : undefined} className={navClass(href)}>
-              <Icon size={18} strokeWidth={1.8} />{label}
+              <Icon size={18} strokeWidth={1.8} />{translateNavigation(label, messageKey ?? null)}
             </Link>
           ))}
-          {visibleCompanyLinks.length > 0 && (
-            <>
-              <button
-                type="button"
-                aria-expanded={companyOpen}
-                aria-controls="company-sidebar-options"
-                onClick={() => setCompanyOpen((open) => !open)}
-                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-left text-sm font-medium transition-colors ${
-                  pathname.startsWith("/company") ? "bg-blue-500/15 text-white ring-1 ring-inset ring-blue-400/20" : "text-slate-300 hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                <Building2 size={18} strokeWidth={1.8} />
-                <span className="flex-1">Company Settings</span>
-                <ChevronDown size={16} className={`transition-transform ${companyOpen ? "rotate-180" : ""}`} />
-              </button>
-              {companyOpen && (
-                <div id="company-sidebar-options" role="group" aria-label="Company settings" className="ml-5 space-y-1 border-l border-slate-700 pl-3">
-                  {visibleCompanyLinks.map(({ href, label }) => (
-                    <Link
-                      key={href}
-                      href={href}
-                      aria-current={pathname === href ? "page" : undefined}
-                      className={`block rounded-lg px-3 py-2 text-[13px] ${
-                        pathname === href ? "bg-white/10 font-semibold text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
-                      }`}
-                    >
-                      {label}
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
         </nav>
 
-        <p className="mb-2 mt-8 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Management</p>
-        <nav aria-label="Management" className="space-y-1">
-          {visibleNavigation.slice(3).map(({ href, label, icon: Icon }) => (
-            <Link key={href} href={href} aria-current={isActive(href) ? "page" : undefined} className={navClass(href)}>
-              <Icon size={18} strokeWidth={1.8} />{label}
-            </Link>
-          ))}
-          {companyManagementLink()}
-          {branchManagementLink()}
-        </nav>
-
-        <div className="mt-auto">
-          <div className="mb-3 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-            <p className="truncate text-xs font-semibold text-white">{user?.email || "Signed-in workspace"}</p>
-            <p className="mt-1 text-[11px] leading-5 text-slate-400">Manage the cards and company data assigned to your account.</p>
-          </div>
-          <button type="button" onClick={() => void signOut()} disabled={signingOut} className="flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-white disabled:opacity-60">
-            <LogOut size={18} />{signingOut ? "Signing out..." : "Sign out"}
+        <div className="mt-auto flex items-center justify-between rounded-xl px-3.5 py-2">
+          <span className="text-sm font-medium text-slate-300">Admin</span>
+          <button
+            type="button"
+            aria-label={signingOut ? "Signing out" : "Sign out"}
+            title={signingOut ? "Signing out" : "Sign out"}
+            onClick={() => void signOut()}
+            disabled={signingOut}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 hover:bg-white/5 hover:text-white disabled:opacity-60"
+          >
+            <LogOut size={18} />
           </button>
         </div>
       </aside>

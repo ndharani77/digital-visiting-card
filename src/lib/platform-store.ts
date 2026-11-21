@@ -3,6 +3,15 @@ import { randomUUID } from "node:crypto";
 import { createDefaultCompanyPreview, type CompanyPreviewSettings } from "@/lib/company-content";
 import { DEFAULT_CARD_ACCENT, DEFAULT_CARD_BACKGROUND } from "@/lib/card-defaults";
 import {
+  CARD_APPEARANCE_BACKGROUNDS,
+  DEFAULT_CARD_APPEARANCE,
+  DEFAULT_COMPANY_THEME,
+  normalizeCardAppearance,
+  normalizeCompanyTheme,
+  type CardAppearance,
+  type CompanyTheme,
+} from "@/lib/company-theme";
+import {
   canAccessCard,
   canManageCompany,
   canManageCard,
@@ -19,6 +28,7 @@ import {
   updateJsonPlatform,
   usesJsonStorage,
   type JsonEmployee,
+  type JsonPlatformState,
 } from "@/lib/json-store";
 import type { CompanySettings } from "@/lib/company-settings";
 import type { VisitingCard } from "@/lib/types";
@@ -29,6 +39,7 @@ type CardRow = {
   employee_id: string;
   branch_id: string | null;
   branch_name: string | null;
+  card_logo: string;
   full_name: string;
   designation: string;
   country_code: string;
@@ -61,12 +72,14 @@ export type CompanyRecord = {
   description: string;
   status: "active" | "inactive";
   preview: CompanyPreviewSettings;
+  theme: CompanyTheme;
+  cardAppearance: CardAppearance;
 };
 
 export type CompanyInput = Pick<
   CompanyRecord,
   "name" | "email" | "phone" | "website" | "address" | "city" | "state" | "country" | "description" | "status"
-> & { logoData?: string; preview?: CompanyPreviewSettings };
+> & { logoData?: string; preview?: CompanyPreviewSettings; theme?: CompanyTheme; cardAppearance?: CardAppearance };
 
 export type BranchRecord = {
   id: string;
@@ -82,11 +95,74 @@ export type BranchRecord = {
 
 export type BranchInput = Pick<BranchRecord, "name" | "code" | "address" | "city" | "state" | "country">;
 
+export type EmployeeOverview = {
+  id: string;
+  companyId: string;
+  companyName: string;
+  fullName: string;
+  email: string;
+  designation: string;
+  status: "active" | "inactive";
+  cardId: string | null;
+};
+
+export type CompanyStatistics = {
+  companyId: string;
+  companyName: string;
+  companyStatus: "active" | "inactive";
+  employees: number;
+  cards: number;
+  activeCards: number;
+  inactiveCards: number;
+  activeQrCodes: number;
+};
+
+export type PlatformStatistics = {
+  companies: number;
+  activeCompanies: number;
+  employees: number;
+  cards: number;
+  activeCards: number;
+  inactiveCards: number;
+  activeQrCodes: number;
+  byCompany: CompanyStatistics[];
+};
+
+export type ActivityLogOverview = {
+  id: string;
+  companyId: string;
+  companyName: string;
+  actorEmail: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  createdAt: string;
+};
+
 export class BranchAssignmentError extends Error {
   constructor(message = "Choose an active branch from this company.") {
     super(message);
     this.name = "BranchAssignmentError";
   }
+}
+
+export function recordActivity(
+  state: JsonPlatformState,
+  user: AuthUser,
+  companyId: string,
+  action: string,
+  entityType: string,
+  entityId: string
+): void {
+  state.activityLogs.push({
+    id: randomUUID(),
+    companyId,
+    actorUserId: user.id,
+    action,
+    entityType,
+    entityId,
+    createdAt: new Date().toISOString(),
+  });
 }
 
 function toVisitingCard(row: CardRow): VisitingCard {
@@ -106,7 +182,7 @@ function toVisitingCard(row: CardRow): VisitingCard {
     website: row.company_website,
     linkedin: row.linkedin,
     linkedinName: row.linkedin_name,
-    logoData: row.company_logo,
+    logoData: row.card_logo || row.company_logo,
     backgroundColor: DEFAULT_CARD_BACKGROUND,
     accentColor: DEFAULT_CARD_ACCENT,
     preview: row.preview ?? undefined,
@@ -120,23 +196,34 @@ function cardProjection(db: ReturnType<typeof getDatabase>) {
     c.id, c.company_id, c.employee_id, c.full_name, c.designation,
     c.branch_id, (SELECT b.name FROM branches b WHERE b.id = c.branch_id) AS branch_name,
     c.country_code, c.mobile, c.email, c.address, c.website, c.linkedin,
-    c.linkedin_name, c.is_active, c.preview, c.created_at,
+    c.linkedin_name, c.logo_data AS card_logo, c.is_active, c.preview, c.created_at,
     co.name AS company_name, co.logo_data AS company_logo,
     co.website AS company_website, co.preview AS company_preview
   `;
 }
 
 async function getSelectedCompany(user: AuthUser, requestedCompanyId?: string | null): Promise<string> {
-  const selected = user.role === "SUPER_ADMIN"
-    ? requestedCompanyId ?? await getActiveCompanyId(user)
-    : user.companyId;
+  let selected: string | null | undefined;
+  if (user.role === "SUPER_ADMIN") {
+    const activeCompanyId = await getActiveCompanyId(user);
+    if (activeCompanyId && requestedCompanyId && activeCompanyId !== requestedCompanyId) {
+      throw new AuthorizationError("The selected company is outside your active workspace.");
+    }
+    selected = activeCompanyId ?? requestedCompanyId;
+  } else {
+    if (requestedCompanyId && requestedCompanyId !== user.companyId) {
+      throw new AuthorizationError("The selected company is outside your account access.");
+    }
+    selected = user.companyId;
+  }
   if (!selected) {
     throw new CompanySelectionRequiredError();
   }
-  if (!canViewCompany(user, selected)) {
+  const selectedCompanyId: string = selected;
+  if (!canViewCompany(user, selectedCompanyId)) {
     throw new AuthorizationError("The selected company is outside your account access.");
   }
-  return selected;
+  return selectedCompanyId;
 }
 
 function getLocalCard(card: VisitingCard, state: Awaited<ReturnType<typeof readJsonPlatform>>): VisitingCard | null {
@@ -145,10 +232,12 @@ function getLocalCard(card: VisitingCard, state: Awaited<ReturnType<typeof readJ
   const branch = state.branches.find((item) => item.id === card.branchId && item.companyId === card.companyId);
   return {
     ...card,
+    backgroundColor: CARD_APPEARANCE_BACKGROUNDS[normalizeCardAppearance(company.cardAppearance)],
+    accentColor: card.accentColor ?? DEFAULT_CARD_ACCENT,
     branchName: branch?.name,
     company: company.name,
     website: company.website,
-    logoData: company.logoData,
+    logoData: card.logoData || company.logoData,
   };
 }
 
@@ -167,19 +256,33 @@ function toCompany(row: Record<string, unknown>): CompanyRecord {
     description: String(row.description ?? ""),
     status: row.status === "inactive" ? "inactive" : "active",
     preview: (row.preview ?? {}) as CompanyPreviewSettings,
+    theme: normalizeCompanyTheme(row.theme),
+    cardAppearance: normalizeCardAppearance(row.card_appearance),
   };
 }
 
 export async function listCompanies(user: AuthUser): Promise<CompanyRecord[]> {
+  const activeCompanyId = user.role === "SUPER_ADMIN" ? await getActiveCompanyId(user) : null;
   if (usesJsonStorage()) {
     const state = await readJsonPlatform();
     return state.companies
-      .filter((company) => user.role === "SUPER_ADMIN" || company.id === user.companyId)
+      .filter((company) => user.role === "SUPER_ADMIN"
+        ? !activeCompanyId || company.id === activeCompanyId
+        : company.id === user.companyId)
       .sort((left, right) => left.name.localeCompare(right.name));
   }
 
   const db = getDatabase();
   if (user.role === "SUPER_ADMIN") {
+    if (activeCompanyId) {
+      const rows = await db`
+        SELECT id, name, email, phone, website, logo_data, address, city, state,
+               country, description, status, preview
+        FROM companies
+        WHERE id = ${activeCompanyId}
+      `;
+      return rows.map(toCompany);
+    }
     const rows = await db`
       SELECT id, name, email, phone, website, logo_data, address, city, state,
              country, description, status, preview
@@ -195,6 +298,105 @@ export async function listCompanies(user: AuthUser): Promise<CompanyRecord[]> {
     FROM companies WHERE id = ${user.companyId}
   `;
   return rows.map(toCompany);
+}
+
+export async function listEmployeesForUser(user: AuthUser): Promise<EmployeeOverview[]> {
+  const state = await readJsonPlatform();
+  const activeCompanyId = user.role === "SUPER_ADMIN" ? await getActiveCompanyId(user) : user.companyId;
+  const visibleCompanies = state.companies.filter((company) =>
+    user.role === "SUPER_ADMIN"
+      ? !activeCompanyId || company.id === activeCompanyId
+      : user.role === "COMPANY_ADMIN"
+        ? company.id === user.companyId
+        : company.id === user.companyId
+  );
+  const visibleCompanyIds = new Set(visibleCompanies.map((company) => company.id));
+  const companyNames = new Map(visibleCompanies.map((company) => [company.id, company.name]));
+  const cardsByEmployee = new Map<string, string>();
+  for (const card of state.cards) {
+    if (card.employeeId && visibleCompanyIds.has(card.companyId ?? "")) {
+      cardsByEmployee.set(card.employeeId, card.id);
+    }
+  }
+  return state.employees
+    .filter((employee) =>
+      visibleCompanyIds.has(employee.companyId) &&
+      (user.role !== "EMPLOYEE" || employee.id === user.employeeId)
+    )
+    .map((employee) => ({
+      id: employee.id,
+      companyId: employee.companyId,
+      companyName: companyNames.get(employee.companyId) ?? "",
+      fullName: employee.fullName,
+      email: employee.email,
+      designation: employee.designation,
+      status: employee.status,
+      cardId: cardsByEmployee.get(employee.id) ?? null,
+    }))
+    .sort((left, right) =>
+      left.companyName.localeCompare(right.companyName) || left.fullName.localeCompare(right.fullName)
+    );
+}
+
+export async function getPlatformStatistics(user: AuthUser): Promise<PlatformStatistics> {
+  requireCompanyAdmin(user);
+  const state = await readJsonPlatform();
+  const activeCompanyId = user.role === "SUPER_ADMIN" ? await getActiveCompanyId(user) : user.companyId;
+  const companies = state.companies.filter((company) =>
+    user.role === "SUPER_ADMIN"
+      ? !activeCompanyId || company.id === activeCompanyId
+      : company.id === user.companyId
+  );
+  const byCompany = companies.map((company): CompanyStatistics => {
+    const employees = state.employees.filter((employee) => employee.companyId === company.id);
+    const cards = state.cards.filter((card) => card.companyId === company.id);
+    const employeeIds = new Set(employees.filter((employee) => employee.status === "active").map((employee) => employee.id));
+    const activeQrCodes = cards.filter((card) =>
+      card.isActive && employeeIds.has(card.employeeId ?? "") && company.status === "active"
+    ).length;
+    return {
+      companyId: company.id,
+      companyName: company.name,
+      companyStatus: company.status,
+      employees: employees.length,
+      cards: cards.length,
+      activeCards: cards.filter((card) => card.isActive).length,
+      inactiveCards: cards.filter((card) => !card.isActive).length,
+      activeQrCodes,
+    };
+  });
+  return {
+    companies: companies.length,
+    activeCompanies: companies.filter((company) => company.status === "active").length,
+    employees: byCompany.reduce((sum, company) => sum + company.employees, 0),
+    cards: byCompany.reduce((sum, company) => sum + company.cards, 0),
+    activeCards: byCompany.reduce((sum, company) => sum + company.activeCards, 0),
+    inactiveCards: byCompany.reduce((sum, company) => sum + company.inactiveCards, 0),
+    activeQrCodes: byCompany.reduce((sum, company) => sum + company.activeQrCodes, 0),
+    byCompany,
+  };
+}
+
+export async function getActivityLogsForUser(user: AuthUser): Promise<ActivityLogOverview[]> {
+  requireCompanyAdmin(user);
+  const state = await readJsonPlatform();
+  const activeCompanyId = user.role === "SUPER_ADMIN" ? await getActiveCompanyId(user) : user.companyId;
+  const visibleCompanies = new Map(state.companies
+    .filter((company) =>
+      user.role === "SUPER_ADMIN"
+        ? !activeCompanyId || company.id === activeCompanyId
+        : company.id === user.companyId
+    )
+    .map((company) => [company.id, company.name]));
+  const accountEmails = new Map(state.users.map((account) => [account.id, account.email]));
+  return state.activityLogs
+    .filter((log) => visibleCompanies.has(log.companyId))
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+    .map((log) => ({
+      ...log,
+      companyName: visibleCompanies.get(log.companyId) ?? "",
+      actorEmail: accountEmails.get(log.actorUserId) ?? "System",
+    }));
 }
 
 function toBranch(row: Record<string, unknown>): BranchRecord {
@@ -258,6 +460,7 @@ export async function createBranch(
         updatedAt: new Date().toISOString(),
       };
       state.branches.push(branch);
+      recordActivity(state, user, companyId, "created", "branch", branch.id);
       return branch;
     });
   }
@@ -292,6 +495,7 @@ export async function updateBranch(
         throw new Error("A branch with this name already exists in this company.");
       }
       Object.assign(branch, input, { updatedAt: new Date().toISOString() });
+      recordActivity(state, user, companyId, "updated", "branch", branch.id);
       return branch;
     });
   }
@@ -327,16 +531,19 @@ export async function getCompany(user: AuthUser, companyId?: string | null): Pro
   return rows[0] ? toCompany(rows[0]) : null;
 }
 
-export async function createCompany(input: CompanyInput): Promise<CompanyRecord> {
+export async function createCompany(user: AuthUser, input: CompanyInput): Promise<CompanyRecord> {
   if (usesJsonStorage()) {
     const company: CompanyRecord = {
       id: randomUUID(),
       ...input,
       logoData: input.logoData ?? "",
       preview: input.preview ?? createDefaultCompanyPreview(input.name),
+      theme: input.theme ?? DEFAULT_COMPANY_THEME,
+      cardAppearance: input.cardAppearance ?? DEFAULT_CARD_APPEARANCE,
     };
     await updateJsonPlatform((state) => {
       state.companies.push(company);
+      recordActivity(state, user, company.id, "created", "company", company.id);
     });
     return company;
   }
@@ -358,6 +565,78 @@ export async function createCompany(input: CompanyInput): Promise<CompanyRecord>
   return toCompany(rows[0]);
 }
 
+export async function createCompanyWithAdmin(
+  user: AuthUser,
+  input: CompanyInput,
+  admin: { email: string; passwordHash: string }
+): Promise<{ kind: "created"; company: CompanyRecord } | { kind: "duplicate-admin" }> {
+  if (user.role !== "SUPER_ADMIN") throw new AuthorizationError("Only Super Admins can create companies.");
+  if (usesJsonStorage()) {
+    return updateJsonPlatform((state) => {
+      if (state.users.some((account) => account.email.toLowerCase() === admin.email)) {
+        return { kind: "duplicate-admin" as const };
+      }
+      const company: CompanyRecord = {
+        id: randomUUID(),
+        ...input,
+        logoData: input.logoData ?? "",
+        preview: input.preview ?? createDefaultCompanyPreview(input.name),
+        theme: input.theme ?? DEFAULT_COMPANY_THEME,
+        cardAppearance: input.cardAppearance ?? DEFAULT_CARD_APPEARANCE,
+      };
+      const account = {
+        id: randomUUID(),
+        email: admin.email,
+        passwordHash: admin.passwordHash,
+        role: "COMPANY_ADMIN" as const,
+        companyId: company.id,
+        employeeId: null,
+        status: "active" as const,
+        mustChangePassword: false,
+        createdAt: new Date().toISOString(),
+      };
+      state.companies.push(company);
+      state.users.push(account);
+      recordActivity(state, user, company.id, "created", "company", company.id);
+      recordActivity(state, user, company.id, "created", "company-admin", account.id);
+      return { kind: "created" as const, company };
+    });
+  }
+
+  const db = getDatabase();
+  return db.begin(async (transaction) => {
+    const [existingAdmin] = await transaction`
+      SELECT id FROM users WHERE lower(email) = ${admin.email}
+    `;
+    if (existingAdmin) return { kind: "duplicate-admin" as const };
+
+    const companyId = randomUUID();
+    const adminId = randomUUID();
+    const rows = await transaction`
+      INSERT INTO companies (
+        id, name, email, phone, website, logo_data, address, city, state,
+        country, description, status, preview
+      ) VALUES (
+        ${companyId}, ${input.name}, ${input.email}, ${input.phone}, ${input.website},
+        ${input.logoData ?? ""}, ${input.address}, ${input.city}, ${input.state},
+        ${input.country}, ${input.description}, ${input.status},
+        ${JSON.stringify(input.preview ?? createDefaultCompanyPreview(input.name))}::jsonb
+      )
+      RETURNING id, name, email, phone, website, logo_data, address, city, state,
+                country, description, status, preview
+    `;
+    await transaction`
+      INSERT INTO users (
+        id, email, password_hash, role, company_id, employee_id, status, must_change_password
+      ) VALUES (
+        ${adminId}, ${admin.email}, ${admin.passwordHash}, 'COMPANY_ADMIN',
+        ${companyId}, NULL, 'active', false
+      )
+    `;
+    return { kind: "created" as const, company: toCompany(rows[0]) };
+  });
+}
+
 export async function updateCompany(
   user: AuthUser,
   companyId: string,
@@ -368,14 +647,25 @@ export async function updateCompany(
     return updateJsonPlatform((state) => {
       const company = state.companies.find((item) => item.id === companyId);
       if (!company) return null;
+      const previousStatus = company.status;
+      if (input.logoData !== undefined) {
+        for (const card of state.cards) {
+          if (card.companyId === companyId && !card.logoData) {
+            card.logoData = company.logoData;
+          }
+        }
+      }
       Object.assign(company, input);
       for (const card of state.cards) {
         if (card.companyId === companyId) {
           card.company = company.name;
           card.website = company.website;
-          card.logoData = company.logoData;
         }
       }
+      const action = input.status && input.status !== previousStatus
+        ? input.status === "active" ? "activated" : "deactivated"
+        : "updated";
+      recordActivity(state, user, companyId, action, "company", companyId);
       return company;
     });
   }
@@ -411,6 +701,8 @@ export async function getCompanySettings(user: AuthUser, companyId?: string | nu
     website: company.website,
     logoData: company.logoData,
     preview: company.preview,
+    theme: normalizeCompanyTheme(company.theme),
+    cardAppearance: normalizeCardAppearance(company.cardAppearance),
   };
 }
 
@@ -424,6 +716,8 @@ export async function saveCompanySettings(
     website: settings.website,
     logoData: settings.logoData,
     preview: settings.preview,
+    theme: settings.theme,
+    cardAppearance: settings.cardAppearance,
   });
   if (!updated) throw new Error("Company not found.");
   return settings;
@@ -549,6 +843,8 @@ export async function getPublicCard(id: string): Promise<{ card: VisitingCard; c
         website: company.website,
         logoData: company.logoData,
         preview: company.preview,
+        theme: normalizeCompanyTheme(company.theme),
+        cardAppearance: normalizeCardAppearance(company.cardAppearance),
       },
     };
   }
@@ -576,6 +872,8 @@ export async function getPublicCard(id: string): Promise<{ card: VisitingCard; c
       website: row.company_website,
       logoData: row.company_logo,
       preview: row.company_preview,
+      theme: DEFAULT_COMPANY_THEME,
+      cardAppearance: DEFAULT_CARD_APPEARANCE,
     },
   };
 }
@@ -624,7 +922,7 @@ export async function createCardForUser(
         branchName: branch?.name,
         company: company.name,
         website: company.website,
-        logoData: company.logoData,
+        logoData: input.logoData ?? company.logoData,
         backgroundColor: DEFAULT_CARD_BACKGROUND,
         accentColor: DEFAULT_CARD_ACCENT,
         isActive: true,
@@ -632,6 +930,8 @@ export async function createCardForUser(
       };
       state.employees.push(employee);
       state.cards.unshift(card);
+      recordActivity(state, user, companyId, "created", "employee", employeeId);
+      recordActivity(state, user, companyId, "created", "card", card.id);
       return card;
     });
   }
@@ -660,12 +960,13 @@ export async function createCardForUser(
     await transaction`
       INSERT INTO cards (
         id, company_id, employee_id, full_name, designation, country_code,
-        mobile, email, address, website, linkedin, linkedin_name, branch_id
+        mobile, email, address, website, linkedin, linkedin_name, logo_data, branch_id
       ) VALUES (
         ${cardId}, ${companyId}, ${employeeId}, ${input.fullName},
         ${input.designation}, ${input.countryCode}, ${input.mobile},
         ${input.email.trim().toLowerCase()}, ${input.address}, ${input.website},
-        ${input.linkedin}, ${input.linkedinName ?? ""}, ${input.branchId ?? null}
+        ${input.linkedin}, ${input.linkedinName ?? ""}, ${input.logoData ?? ""},
+        ${input.branchId ?? null}
       )
     `;
   });
@@ -678,6 +979,7 @@ export async function updateCardForUser(
   user: AuthUser,
   id: string,
   input: Pick<VisitingCard, "fullName" | "designation" | "countryCode" | "mobile" | "email" | "address" | "linkedin" | "linkedinName"> & {
+    logoData: string;
     branchId?: string | null;
   }
 ): Promise<VisitingCard | null> {
@@ -722,8 +1024,10 @@ export async function updateCardForUser(
         linkedin: input.linkedin,
         linkedinName: input.linkedinName ?? "",
       };
-      Object.assign(card, updatedFields);
+      Object.assign(card, updatedFields, { logoData: input.logoData });
       Object.assign(employee, updatedFields);
+      recordActivity(state, user, companyId, "updated", "employee", employeeId);
+      recordActivity(state, user, companyId, "updated", "card", id);
       return getLocalCard(card, state);
     });
   }
@@ -753,6 +1057,7 @@ export async function updateCardForUser(
         country_code = ${input.countryCode}, mobile = ${input.mobile},
         email = ${input.email.trim().toLowerCase()}, address = ${input.address},
         linkedin = ${input.linkedin}, linkedin_name = ${input.linkedinName ?? ""},
+        logo_data = ${input.logoData},
         branch_id = CASE WHEN ${input.branchId !== undefined} THEN ${input.branchId ?? null} ELSE branch_id END
       WHERE id = ${id} AND company_id = ${companyId}
         AND employee_id = ${employeeId}
@@ -782,6 +1087,7 @@ export async function setCardActiveForUser(
       if (!card || !employee) return null;
       card.isActive = isActive;
       employee.status = isActive ? "active" : "inactive";
+      recordActivity(state, user, companyId, isActive ? "activated" : "deactivated", "card", id);
       return getLocalCard(card, state);
     });
   }
@@ -819,6 +1125,7 @@ export async function setCardPreviewForUser(
       if (!card) return null;
       if (preview) card.preview = preview;
       else delete card.preview;
+      recordActivity(state, user, companyId, "updated-preview", "card", id);
       return getLocalCard(card, state);
     });
   }
@@ -843,7 +1150,9 @@ export async function deleteCardForUser(user: AuthUser, id: string): Promise<boo
       if (cardIndex === -1) return false;
       const employeeId = state.cards[cardIndex].employeeId;
       state.cards.splice(cardIndex, 1);
-      if (!state.cards.some((item) => item.employeeId === employeeId && item.companyId === companyId)) {
+      recordActivity(state, user, companyId, "deleted", "card", id);
+      if (employeeId && !state.cards.some((item) => item.employeeId === employeeId && item.companyId === companyId)) {
+        recordActivity(state, user, companyId, "deleted", "employee", employeeId);
         state.employees = state.employees.filter((item) => item.id !== employeeId || item.companyId !== companyId);
         state.users = state.users.filter((item) => item.employeeId !== employeeId || item.companyId !== companyId);
       }

@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { authFailureResponse } from "@/lib/api-auth";
 import { requireUser } from "@/lib/auth";
-import { isCompanyPreviewSettings } from "@/lib/company-content";
+import {
+  isCompanyPreviewSettings,
+  mergeCardPreviewWithCompanyDefaults,
+  stripDefaultServicesFromCardPreview,
+} from "@/lib/company-content";
 import {
   getCardForUser,
   getCompanySettings,
@@ -20,9 +24,11 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     if (card.preview !== undefined && !isCompanyPreviewSettings(card.preview)) {
       return NextResponse.json({ message: "Saved card preview details are invalid." }, { status: 500 });
     }
+    const preview = mergeCardPreviewWithCompanyDefaults(settings.preview, card.preview);
     return NextResponse.json({
-      preview: card.preview ?? settings.preview,
+      preview,
       isCustom: card.preview !== undefined,
+      defaultServiceIds: settings.preview.services.items.map((service) => service.id),
     });
   } catch (error) {
     const authResponse = authFailureResponse(error);
@@ -51,9 +57,17 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   }
   try {
     const { id } = await context.params;
-    const card = await setCardPreviewForUser(user, id, body.preview);
+    const existingCard = await getCardForUser(user, id);
+    if (!existingCard) return NextResponse.json({ message: "Visiting card not found." }, { status: 404 });
+    const settings = await getCompanySettings(user, existingCard.companyId);
+    const cardPreview = stripDefaultServicesFromCardPreview(settings.preview, body.preview);
+    const card = await setCardPreviewForUser(user, id, cardPreview);
     if (!card) return NextResponse.json({ message: "Visiting card not found." }, { status: 404 });
-    return NextResponse.json({ preview: card.preview, isCustom: true });
+    return NextResponse.json({
+      preview: mergeCardPreviewWithCompanyDefaults(settings.preview, card.preview),
+      isCustom: true,
+      defaultServiceIds: settings.preview.services.items.map((service) => service.id),
+    });
   } catch (error) {
     const authResponse = authFailureResponse(error);
     if (authResponse) return authResponse;
@@ -69,7 +83,11 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
     const card = await setCardPreviewForUser(user, id, undefined);
     if (!card) return NextResponse.json({ message: "Visiting card not found." }, { status: 404 });
     const settings = await getCompanySettings(user, card.companyId);
-    return NextResponse.json({ preview: settings.preview, isCustom: false });
+    return NextResponse.json({
+      preview: settings.preview,
+      isCustom: false,
+      defaultServiceIds: settings.preview.services.items.map((service) => service.id),
+    });
   } catch (error) {
     const authResponse = authFailureResponse(error);
     if (authResponse) return authResponse;

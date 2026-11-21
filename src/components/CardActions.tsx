@@ -144,7 +144,7 @@ export default function CardActions({
               <div>
                 <h2 id={`delete-card-title-${cardId}`} className="text-lg font-bold text-slate-950">Delete this card?</h2>
                 <p id={`delete-card-description-${cardId}`} className="mt-2 text-sm leading-6 text-slate-600">
-                  This permanently deletes {cardName}&apos;s card, QR code, and linked employee access, if any. This action cannot be undone.
+                  This permanently deletes {cardName}&apos;s card and QR code. This action cannot be undone.
                 </p>
               </div>
             </div>

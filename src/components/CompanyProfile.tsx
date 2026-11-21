@@ -2,69 +2,105 @@
 
 import Image from "next/image";
 import { useState } from "react";
-import { ArrowLeft, ArrowRight, ArrowUpRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, Pencil, X } from "lucide-react";
 import EnquiryForm from "@/components/EnquiryForm";
 import CompanyProfilePrint from "@/components/CompanyProfilePrint";
-import type { CompanyPreviewSettings } from "@/lib/company-content";
+import CompanyPreviewDetailsEditor from "@/components/CompanyPreviewDetailsEditor";
+import {
+  getCompanyPreviewTabOrder,
+  isCompanyPreviewTabHidden,
+  type CompanyPreviewSettings,
+} from "@/lib/company-content";
 
 export default function CompanyProfile({
   recipientEmail,
   preview,
   isActive,
+  cardId,
+  canEditPreview,
+  isCustomPreview,
+  defaultServiceIds,
+  onPreviewSaved,
 }: {
   recipientEmail: string;
   preview: CompanyPreviewSettings;
   isActive: boolean;
+  cardId: string;
+  canEditPreview: boolean;
+  isCustomPreview: boolean;
+  defaultServiceIds: string[];
+  onPreviewSaved: (preview: CompanyPreviewSettings, isCustom: boolean) => void;
 }) {
-  const [activeSlide, setActiveSlide] = useState(0);
-  const tabs = [preview.tabs.about, preview.tabs.services, preview.tabs.enquiry];
+  const [isEditingPreview, setIsEditingPreview] = useState(false);
+  const [activeSlide, setActiveSlide] = useState(() => getCompanyPreviewTabOrder(preview)[0] ?? "about");
+  const visibleServices = preview.services.items.filter((service) => service.title || service.description || service.image);
+  const customTabs = preview.customTabs ?? [];
+  const tabs = getCompanyPreviewTabOrder(preview).flatMap((id) => {
+    if (isCompanyPreviewTabHidden(preview, id)) return [];
+    if (id === "about") return [{ id, label: preview.tabs.about, kind: "about" as const }];
+    if (id === "services") return [{ id, label: preview.tabs.services, kind: "services" as const }];
+    if (id === "enquiry") return [{ id, label: preview.tabs.enquiry, kind: "enquiry" as const }];
+    const customTab = customTabs.find((tab) => tab.id === id);
+    return customTab ? [{ id, label: customTab.title, kind: "custom" as const, customTab }] : [];
+  });
+  const selectedSlide = tabs.some((tab) => tab.id === activeSlide) ? activeSlide : tabs[0]?.id ?? "about";
+  const selectedTab = tabs.find((tab) => tab.id === selectedSlide);
+  const activeSlideIndex = tabs.findIndex((tab) => tab.id === selectedSlide);
+  if (tabs.length === 0 && !canEditPreview) return null;
 
   return (
+    <>
     <section aria-label="Company information" className="company-profile-section mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <nav aria-label="Company information slides" className="company-profile-tabs flex border-b border-slate-200 bg-slate-50/70 px-4">
-        {tabs.map((label, index) => (
+      {canEditPreview && <div className="flex justify-end border-b border-slate-200 px-4 py-2">
+        <button type="button" onClick={() => setIsEditingPreview(true)} className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">
+          <Pencil size={15} />Edit preview
+        </button>
+      </div>}
+      {tabs.length > 0 && <nav aria-label="Company information slides" className="company-profile-tabs flex overflow-x-auto border-b border-slate-200 bg-slate-50/70 px-4">
+        {tabs.map((label) => (
           <button
-            key={index}
+            key={label.id}
             type="button"
-            aria-pressed={activeSlide === index}
-            onClick={() => setActiveSlide(index)}
-            className={`min-w-28 border-b-2 px-5 py-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 ${
-              activeSlide === index
-                ? "border-[#07518a] text-[#07518a]"
-                : "border-transparent text-[#07518a]/70 hover:text-[#07518a]"
+            aria-pressed={selectedSlide === label.id}
+            onClick={() => setActiveSlide(label.id)}
+            className={`min-w-28 shrink-0 border-b-2 px-5 py-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 ${
+              selectedSlide === label.id
+                ? "company-brand-border company-brand-text"
+                : "border-transparent company-brand-text-subtle company-brand-hover"
             }`}
           >
-            {label}
+            {label.label}
           </button>
         ))}
-      </nav>
+      </nav>}
 
       <div className="p-5">
-        {activeSlide === 0 ? (
+        {tabs.length === 0 ? <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">There are no preview tabs to display.</p> : <>
+        {selectedSlide === "about" ? (
           <div role="group" aria-label={preview.tabs.about} className="company-profile-screen space-y-7">
             <header className="mx-auto max-w-3xl text-center">
-              {preview.about.kicker && <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#07518a]/75">{preview.about.kicker}</p>}
-              {preview.about.title && <h2 id="company-about-title" className="mt-2 text-2xl font-bold tracking-tight text-[#07518a]">{preview.about.title}</h2>}
-              {preview.about.description && <p className="mt-3 whitespace-pre-line text-sm leading-6 text-[#07518a]">{preview.about.description}</p>}
+              {preview.about.kicker && <p className="company-brand-text-muted text-xs font-semibold uppercase tracking-[0.16em]">{preview.about.kicker}</p>}
+              {preview.about.title && <h2 id="company-about-title" className="company-brand-text mt-2 text-2xl font-bold tracking-tight">{preview.about.title}</h2>}
+              {preview.about.description && <p className="company-brand-text mt-3 whitespace-pre-line text-sm leading-6">{preview.about.description}</p>}
             </header>
 
             {preview.about.metrics.length > 0 && <div className="grid grid-cols-2 divide-x divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
               {preview.about.metrics.map((metric) => (
                 <div key={metric.id} className="px-4 py-4">
-                  <p className="text-2xl font-semibold tracking-tight text-[#07518a]">{metric.value}</p>
-                  <p className="mt-1 text-xs leading-5 text-[#07518a]/75">{metric.label}</p>
+                  <p className="company-brand-text text-2xl font-semibold tracking-tight">{metric.value}</p>
+                  <p className="company-brand-text-muted mt-1 text-xs leading-5">{metric.label}</p>
                 </div>
               ))}
             </div>}
 
             <div className="grid gap-4">
               {(preview.about.visionTitle || preview.about.vision) && <article className="rounded-xl border border-slate-200 bg-slate-50/60 p-5 text-justify">
-                {preview.about.visionTitle && <h3 className="mt-2 font-semibold text-[#07518a]">{preview.about.visionTitle}</h3>}
-                {preview.about.vision && <p className="mt-2 whitespace-pre-line text-sm leading-6 text-[#07518a]">{preview.about.vision}</p>}
+                {preview.about.visionTitle && <h3 className="company-brand-text mt-2 font-semibold">{preview.about.visionTitle}</h3>}
+                {preview.about.vision && <p className="company-brand-text mt-2 whitespace-pre-line text-sm leading-6">{preview.about.vision}</p>}
               </article>}
               {(preview.about.missionTitle || preview.about.mission) && <article className="rounded-xl border border-slate-200 bg-slate-50/60 p-5 text-justify">
-                {preview.about.missionTitle && <h3 className="font-semibold text-[#07518a]">{preview.about.missionTitle}</h3>}
-                {preview.about.mission && <p className="mt-3 whitespace-pre-line text-sm leading-6 text-[#07518a]">{preview.about.mission}</p>}
+                {preview.about.missionTitle && <h3 className="company-brand-text font-semibold">{preview.about.missionTitle}</h3>}
+                {preview.about.mission && <p className="company-brand-text mt-3 whitespace-pre-line text-sm leading-6">{preview.about.mission}</p>}
               </article>}
             </div>
             {preview.about.sections.some((section) => section.title || section.content || section.image) && (
@@ -73,47 +109,70 @@ export default function CompanyProfile({
                   <article key={section.id} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50/60">
                     {section.image && <Image src={section.image} alt={section.title} width={960} height={540} unoptimized className="max-h-64 w-full object-cover" />}
                     <div className="p-5">
-                      {section.title && <h3 className="font-semibold text-[#07518a]">{section.title}</h3>}
-                      {section.content && <p className="mt-3 whitespace-pre-line text-sm leading-6 text-[#07518a]">{section.content}</p>}
+                      {section.title && <h3 className="company-brand-text font-semibold">{section.title}</h3>}
+                      {section.content && <p className="company-brand-text mt-3 whitespace-pre-line text-sm leading-6">{section.content}</p>}
                     </div>
                   </article>
                 ))}
               </div>
             )}
           </div>
-        ) : activeSlide === 1 ? (
+        ) : selectedSlide === "services" ? (
           <div role="group" aria-label={preview.tabs.services} className="company-profile-screen">
             <header className="mb-6 text-center">
-              <h2 id="company-services-title" className="mt-2 text-2xl font-bold tracking-tight text-[#07518a]">{preview.services.title}</h2>
+              <h2 id="company-services-title" className="company-brand-text mt-2 text-2xl font-bold tracking-tight">{preview.services.title}</h2>
             </header>
-            <div className="grid grid-cols-1 gap-4">
-              {preview.services.items.filter((service) => service.title || service.description || service.image).map(({ id, title, description, image, href }) => (
+            {visibleServices.length > 0 ? <div className="grid grid-cols-1 gap-4">
+              {visibleServices.map(({ id, title, description, image, href }) => (
                 <article key={id} className="overflow-hidden rounded-xl border border-slate-200 bg-white transition-colors hover:border-slate-300">
                   {image && (href
                     ? <a href={href} target="_blank" rel="noopener noreferrer" aria-label={`View ${title}`}><Image src={image} alt={title} width={960} height={540} unoptimized className="h-56 w-full object-cover" /></a>
                     : <Image src={image} alt={title} width={960} height={540} unoptimized className="h-56 w-full object-cover" />)}
                   <div className="p-5">
                     <div className="flex items-start justify-between gap-3">
-                      <h3 className="text-base font-bold leading-6 text-[#07518a]">
+                      <h3 className="company-brand-text text-base font-bold leading-6">
                         {href ? <a href={href} target="_blank" rel="noopener noreferrer" className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600">{title}</a> : title}
                       </h3>
-                      {href && <a href={href} target="_blank" rel="noopener noreferrer" aria-label={`Open ${title} page`} title="Open service page" className="shrink-0 rounded p-1 text-[#07518a]/70 hover:bg-slate-100 hover:text-[#07518a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"><ArrowUpRight size={16} aria-hidden="true" /></a>}
+                      {href && <a href={href} target="_blank" rel="noopener noreferrer" aria-label={`Open ${title} page`} title="Open service page" className="company-brand-text-subtle company-brand-hover shrink-0 rounded p-1 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"><ArrowUpRight size={16} aria-hidden="true" /></a>}
                     </div>
-                    <p className="mt-2 whitespace-pre-line text-justify text-base leading-7 text-[#07518a]">{description}</p>
+                    <p className="company-brand-text mt-2 whitespace-pre-line text-justify text-base leading-7">{description}</p>
                   </div>
                 </article>
               ))}
-            </div>
+            </div> : <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center text-sm text-slate-600">No services have been added yet.</p>}
             {preview.services.moreLabel && preview.services.moreLink && <div className="mt-6 text-right">
               <a
                 href={preview.services.moreLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 rounded text-sm font-semibold text-[#07518a] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                className="company-brand-text inline-flex items-center gap-1 rounded text-sm font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
               >
                 {preview.services.moreLabel} <ArrowUpRight size={14} aria-hidden="true" />
               </a>
             </div>}
+          </div>
+        ) : selectedTab?.kind === "custom" ? (
+          <div role="group" aria-label={selectedTab.customTab.title} className="company-profile-screen space-y-5">
+            {selectedTab.customTab.fields.map((field) => (
+              <div key={field.id}>
+                {field.type === "service" && (field.title || field.description || field.image) && (
+                  <article className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                    {field.image && <Image src={field.image} alt={field.title ?? ""} width={960} height={540} unoptimized className="h-56 w-full object-cover" />}
+                    <div className="p-5">
+                      {field.title && <h3 className="company-brand-text text-base font-bold leading-6">
+                        {field.href
+                          ? <a href={field.href} target="_blank" rel="noopener noreferrer" className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600">{field.title}</a>
+                          : field.title}
+                      </h3>}
+                      {field.description && <p className="company-brand-text mt-2 whitespace-pre-line text-justify text-base leading-7">{field.description}</p>}
+                    </div>
+                  </article>
+                )}
+                {field.type === "heading" && field.content && <h3 className="company-brand-text text-lg font-semibold">{field.content}</h3>}
+                {field.type === "text" && field.content && <p className="company-brand-text whitespace-pre-line text-sm leading-6">{field.content}</p>}
+                {field.type === "image" && field.content && <Image src={field.content} alt={selectedTab.customTab.title} width={960} height={540} unoptimized className="max-h-80 w-full rounded-xl object-cover" />}
+              </div>
+            ))}
           </div>
         ) : (
           <div className="company-profile-screen">
@@ -124,26 +183,46 @@ export default function CompanyProfile({
         <div className="company-profile-screen mt-7 flex items-center justify-between border-t border-slate-200 pt-4">
           <button
             type="button"
-            onClick={() => setActiveSlide((current) => Math.max(0, current - 1))}
-            disabled={activeSlide === 0}
-            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[#07518a] transition-colors hover:bg-slate-100 hover:text-[#07518a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={() => setActiveSlide(tabs[Math.max(0, activeSlideIndex - 1)].id)}
+            disabled={activeSlideIndex <= 0}
+            className="company-brand-text company-brand-hover inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <ArrowLeft size={16} /> {preview.labels.previous}
           </button>
-          <span className="text-xs font-medium tabular-nums text-[#07518a]/75" aria-live="polite">
-            {activeSlide + 1} / 3
+          <span className="company-brand-text-muted text-xs font-medium tabular-nums" aria-live="polite">
+            {activeSlideIndex + 1} / {tabs.length}
           </span>
           <button
             type="button"
-            onClick={() => setActiveSlide((current) => Math.min(2, current + 1))}
-            disabled={activeSlide === 2}
-            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[#07518a] transition-colors hover:bg-slate-100 hover:text-[#07518a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={() => setActiveSlide(tabs[Math.min(tabs.length - 1, activeSlideIndex + 1)].id)}
+            disabled={activeSlideIndex >= tabs.length - 1}
+            className="company-brand-text company-brand-hover inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {preview.labels.next} <ArrowRight size={16} />
           </button>
         </div>
         <CompanyProfilePrint preview={preview} />
+        </>}
       </div>
     </section>
+    {isEditingPreview && <div className="fixed inset-0 z-[70] flex justify-end bg-slate-950/40">
+      <button type="button" aria-label="Close preview editor" onClick={() => setIsEditingPreview(false)} className="absolute inset-0 h-full w-full cursor-default" />
+      <aside role="dialog" aria-modal="true" aria-labelledby="preview-editor-drawer-title" className="relative flex h-full w-full max-w-3xl flex-col bg-white shadow-2xl">
+        <header className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-3">
+          <h2 id="preview-editor-drawer-title" className="text-base font-bold text-slate-950">Edit this card preview</h2>
+          <button type="button" aria-label="Close preview editor" onClick={() => setIsEditingPreview(false)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X size={20} /></button>
+        </header>
+        <CompanyPreviewDetailsEditor
+          embedded
+          initialCardId={cardId}
+          initialPreview={preview}
+          initialIsCustom={isCustomPreview}
+          initialDefaultServiceIds={defaultServiceIds}
+          onSaved={onPreviewSaved}
+          onClose={() => setIsEditingPreview(false)}
+        />
+      </aside>
+    </div>}
+    </>
   );
 }

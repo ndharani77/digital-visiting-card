@@ -36,7 +36,7 @@ export default function DashboardCardSearch({
         : cards;
   const matchingCards = normalizedQuery
     ? sourceCards.filter((card) =>
-        [card.fullName, card.designation, card.company, card.branchName ?? "", card.email, card.mobile]
+        [card.fullName, card.designation, card.company, card.email, card.mobile]
           .some((value) => value.toLowerCase().includes(normalizedQuery))
       )
     : sourceCards;
@@ -164,11 +164,11 @@ export default function DashboardCardSearch({
             {normalizedQuery ? `No cards match “${query}”.` : filter === "active" ? "There are no active cards." : "There are no inactive cards."}
           </p>
         ) : (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+          <div className="dashboard-card-grid grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
             {matchingCards.map((card) => (
-              <article key={card.id} className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-900/[0.03] transition duration-200 hover:-translate-y-1 hover:border-blue-200 hover:shadow-xl hover:shadow-slate-900/[0.08]">
+              <article key={card.id} className="dashboard-card-tile group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-900/[0.03] transition duration-200 hover:-translate-y-1 hover:border-blue-200 hover:shadow-xl hover:shadow-slate-900/[0.08]">
                 <div className="absolute right-3 top-3 z-10"><CardActions cardId={card.id} cardName={card.fullName} isActive={card.isActive} role={role} /></div>
-                <Link href={`/card/${card.id}/view`} className="block">
+                <Link href={`/card/${card.id}?source=qr`} aria-label={`Preview ${card.fullName}'s scanned visiting card`} className="block">
                   <div className="mb-5 flex items-center justify-between pr-10">
                     <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-800"><CreditCard size={22} /></div>
                     <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${card.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
@@ -179,9 +179,10 @@ export default function DashboardCardSearch({
                   <h3 className="truncate text-base font-bold tracking-tight text-slate-950">{card.fullName}</h3>
                   <p className="mt-1 truncate text-sm font-medium text-slate-600">{card.designation}</p>
                   <p className="mt-1 truncate text-sm text-slate-500">{card.company}</p>
-                  {card.branchName && <p className="mt-1 truncate text-xs font-medium text-blue-700">Branch: {card.branchName}</p>}
                   <p className="mt-4 truncate text-sm text-slate-500">{card.email}</p>
-                  <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4 text-sm font-semibold text-blue-700 group-hover:text-blue-800"><span>View QR code</span><QrCode size={17} /></div>
+                </Link>
+                <Link href={`/card/${card.id}/view`} className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4 text-sm font-semibold text-blue-700 hover:text-blue-800">
+                  <span>View QR code</span><QrCode size={17} />
                 </Link>
               </article>
             ))}

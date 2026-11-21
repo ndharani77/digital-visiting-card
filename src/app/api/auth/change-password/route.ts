@@ -4,6 +4,7 @@ import { authFailureResponse } from "@/lib/api-auth";
 import { createSessionToken, requireUser, SESSION_COOKIE } from "@/lib/auth";
 import { getDatabase } from "@/lib/db";
 import { readJsonPlatform, updateJsonPlatform, usesJsonStorage } from "@/lib/json-store";
+import { recordActivity } from "@/lib/platform-store";
 
 export const runtime = "nodejs";
 
@@ -25,8 +26,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Invalid request body." }, { status: 400 });
   }
   const { currentPassword, newPassword } = body as Record<string, unknown>;
-  if (typeof currentPassword !== "string" || typeof newPassword !== "string" || newPassword.length < 14) {
-    return NextResponse.json({ message: "Enter your current password and a new password with at least 14 characters." }, { status: 400 });
+  if (typeof currentPassword !== "string" || typeof newPassword !== "string" ||
+      newPassword.length < 14 || Buffer.byteLength(newPassword, "utf8") > 72) {
+    return NextResponse.json({ message: "Enter your current password and a new password with at least 14 characters and no more than 72 bytes." }, { status: 400 });
   }
   if (currentPassword === newPassword) {
     return NextResponse.json({ message: "Choose a new password that differs from the temporary password." }, { status: 400 });
@@ -45,6 +47,9 @@ export async function POST(request: Request) {
         if (currentAccount) {
           currentAccount.passwordHash = passwordHash;
           currentAccount.mustChangePassword = false;
+          if (currentAccount.companyId) {
+            recordActivity(currentState, user, currentAccount.companyId, "password-changed", "account", currentAccount.id);
+          }
         }
       });
 

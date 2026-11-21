@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState, type FormEvent, type ChangeEvent } from "react";
-import Link from "next/link";
-import { ArrowLeft, Building2, Crop, Globe, ImagePlus, Save } from "lucide-react";
+import { Building2, Crop, Globe, ImagePlus, Save } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import { DEFAULT_COMPANY, DEFAULT_COMPANY_LOGO, DEFAULT_WEBSITE } from "@/lib/card-defaults";
 import { DEFAULT_COMPANY_PREVIEW, isCompanyPreviewSettings } from "@/lib/company-content";
+import { DEFAULT_CARD_APPEARANCE, DEFAULT_COMPANY_THEME, isCardAppearance, isCompanyTheme } from "@/lib/company-theme";
 import type { CompanySettings } from "@/lib/company-settings";
 
 const initialSettings: CompanySettings = {
@@ -13,6 +13,8 @@ const initialSettings: CompanySettings = {
   website: DEFAULT_WEBSITE,
   logoData: DEFAULT_COMPANY_LOGO,
   preview: DEFAULT_COMPANY_PREVIEW,
+  theme: DEFAULT_COMPANY_THEME,
+  cardAppearance: DEFAULT_CARD_APPEARANCE,
 };
 
 function isCompanySettings(value: unknown): value is CompanySettings {
@@ -25,6 +27,10 @@ function isCompanySettings(value: unknown): value is CompanySettings {
     typeof value.website === "string" &&
     "logoData" in value &&
     typeof value.logoData === "string" &&
+    "theme" in value &&
+    isCompanyTheme(value.theme) &&
+    "cardAppearance" in value &&
+    isCardAppearance(value.cardAppearance) &&
     "preview" in value &&
     isCompanyPreviewSettings(value.preview)
   );
@@ -108,7 +114,7 @@ export default function CompanyPage() {
       if (!response.ok) throw new Error(responseMessage(result, "Unable to save company settings."));
       if (!isCompanySettings(result)) throw new Error("Company settings response is invalid.");
       setSettings(result);
-      setMessage("Company settings saved. New and updated cards will use these values.");
+      setMessage("Company settings saved. New cards will start with this logo; saved cards keep their own logo.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save company settings.");
     } finally {
@@ -121,11 +127,10 @@ export default function CompanyPage() {
       <Sidebar />
       <main className="min-w-0 flex-1 p-5 md:p-8 xl:p-10">
         <div className="mx-auto max-w-3xl">
-          <Link href="/" className="mb-5 inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-blue-600"><ArrowLeft size={16} />Back to dashboard</Link>
           <header className="mb-7">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700">Brand settings</p>
             <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Card branding</h1>
-            <p className="mt-1 text-sm text-slate-500">Manage the company name, website, and logo shown on business cards.</p>
+            <p className="mt-1 text-sm text-slate-500">Manage company details and the logo copied to new cards. Saved cards keep their own logo.</p>
           </header>
 
           <form onSubmit={save} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
@@ -382,7 +387,7 @@ function LogoCropEditor({
           </div>
           <section aria-label="QR scanned card preview" className="relative mx-auto max-w-[430px] overflow-hidden rounded-[18px] border border-slate-200 bg-white shadow-[0_12px_36px_rgba(15,23,42,0.08)]">
             <svg aria-hidden="true" className="pointer-events-none absolute right-0 top-0 h-[100px] w-[56%]" viewBox="0 0 240 112" preserveAspectRatio="none">
-              <path d="M0 0h240v112C184 53 103 10 0 0Z" fill="#07518a" />
+              <path d="M0 0h240v112C184 53 103 10 0 0Z" fill="var(--company-brand-color)" />
               <path d="M0 0C103 10 184 53 240 112" fill="none" stroke="#d8e6f2" strokeWidth="3" />
               <path d="M86 0C155 17 207 57 240 101" fill="none" stroke="#a9c5df" strokeWidth="2" />
             </svg>
@@ -395,12 +400,12 @@ function LogoCropEditor({
             </header>
             <div className="relative z-10 mt-8 px-5">
               <div className="w-fit max-w-full">
-                <h4 className="break-words text-xl font-bold leading-tight tracking-tight text-[#092f60]">Contact name</h4>
-                <div className="mt-2 h-[2px] w-full rounded-full bg-gradient-to-r from-[#2d83c5] via-[#70c4ff] to-[#2d83c5]" />
+                <h4 className="break-words text-xl font-bold leading-tight tracking-tight text-[var(--company-brand-dark)]">Contact name</h4>
+                <div className="mt-2 h-[2px] w-full rounded-full bg-gradient-to-r from-[var(--company-brand-light)] via-[var(--company-brand-color)] to-[var(--company-brand-dark)]" />
               </div>
               <p className="mt-2 text-sm leading-5 text-slate-600">Job title</p>
             </div>
-            <div className="relative z-10 space-y-3 px-5 pb-5 pt-6 text-sm text-[#092f60]">
+            <div className="relative z-10 space-y-3 px-5 pb-5 pt-6 text-sm text-[var(--company-brand-dark)]">
               <p className="border-b border-slate-100 pb-2">Phone number</p>
               <p className="border-b border-slate-100 pb-2">Email address</p>
               <p className="text-slate-500">Website (if available)</p>

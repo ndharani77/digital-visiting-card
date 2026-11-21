@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import Link from "next/link";
-import { ArrowLeft, Building2, Globe, Mail, MapPin, Phone, UserRound, Linkedin, Save } from "lucide-react";
+import Image from "next/image";
+import { Building2, Globe, Mail, MapPin, Phone, UserRound, Linkedin, Save } from "lucide-react";
 import { getCountries, getCountryCallingCode } from "libphonenumber-js";
 import Sidebar from "@/components/Sidebar";
 import { validateCardField, validateCardFields, type CardField, type CardFieldErrors } from "@/lib/card-validation";
@@ -13,15 +14,6 @@ import {
   DEFAULT_COMPANY_LOGO,
   DEFAULT_WEBSITE,
 } from "@/lib/card-defaults";
-import type { UserRole } from "@/lib/types";
-
-type BranchOption = {
-  id: string;
-  name: string;
-  code: string;
-  city: string;
-  status: "active" | "inactive";
-};
 
 const countryNames = new Intl.DisplayNames(["en"], { type: "region" });
 const countryCodes = getCountries()
@@ -44,11 +36,8 @@ export default function CreateCardPage() {
   const [loading, setLoading] = useState(false);
   const [loadingCard, setLoadingCard] = useState(false);
   const [editingId, setEditingId] = useState("");
+  const [companyLogo, setCompanyLogo] = useState(DEFAULT_COMPANY_LOGO);
   const [companySettingsLoaded, setCompanySettingsLoaded] = useState(false);
-  const [userRole, setUserRole] = useState<UserRole | null>(null);
-  const [branches, setBranches] = useState<BranchOption[]>([]);
-  const [branchId, setBranchId] = useState("");
-  const [branchesLoaded, setBranchesLoaded] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<CardFieldErrors>({});
   const [countryPickerOpen, setCountryPickerOpen] = useState(false);
   const [countrySearch, setCountrySearch] = useState("");
@@ -84,23 +73,10 @@ export default function CreateCardPage() {
         const sessionResponse = await fetch("/api/auth/session");
         const session = await sessionResponse.json();
         if (!sessionResponse.ok) throw new Error(session.message || "Unable to load account details.");
-        const role = session.user?.role as UserRole;
-        const companyId = role === "SUPER_ADMIN"
-          ? session.activeCompanyId
-          : session.user?.companyId;
-        setUserRole(role);
-
-        if (role !== "EMPLOYEE" && typeof companyId === "string" && companyId) {
-          const branchesResponse = await fetch(`/api/companies/${encodeURIComponent(companyId)}/branches`);
-          const branchResult = await branchesResponse.json();
-          if (!branchesResponse.ok) throw new Error(branchResult.message || "Unable to load company branches.");
-          setBranches(branchResult as BranchOption[]);
-        }
-        setBranchesLoaded(true);
-
         const settingsResponse = await fetch("/api/company");
         const settings = await settingsResponse.json();
         if (!settingsResponse.ok) throw new Error(settings.message || "Unable to load company settings.");
+        setCompanyLogo(settings.logoData);
         setForm((current) => ({
           ...current,
           company: settings.companyName,
@@ -125,11 +101,10 @@ export default function CreateCardPage() {
           website: settings.website,
           linkedin: result.linkedin || "",
           linkedinName: result.linkedinName || "",
-          logoData: settings.logoData,
+          logoData: result.logoData || settings.logoData,
           backgroundColor: result.backgroundColor || initialForm.backgroundColor,
           accentColor: result.accentColor || initialForm.accentColor,
         });
-        setBranchId(typeof result.branchId === "string" ? result.branchId : "");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to load card.");
       } finally {
@@ -157,6 +132,40 @@ export default function CreateCardPage() {
     }
   }
 
+  async function updateCardLogo(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      setError("Choose a PNG, JPEG, or WebP logo.");
+      return;
+    }
+    if (file.size > 500 * 1024) {
+      setError("Choose a logo no larger than 500 KB.");
+      return;
+    }
+
+    try {
+      const logoData = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result !== "string") {
+            reject(new Error("Unable to read this logo file."));
+            return;
+          }
+          resolve(reader.result);
+        };
+        reader.onerror = () => reject(new Error("Unable to read this logo file."));
+        reader.readAsDataURL(file);
+      });
+      update("logoData", logoData);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to read this logo file.");
+    }
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -165,9 +174,7 @@ export default function CreateCardPage() {
     if (Object.keys(validationErrors).length > 0) return;
     setLoading(true);
     try {
-      const payload = userRole && userRole !== "EMPLOYEE"
-        ? { ...form, branchId: branchId || null }
-        : form;
+      const payload = form;
       const response = await fetch(editingId ? `/api/cards/${encodeURIComponent(editingId)}` : "/api/cards", {
         method: editingId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -199,7 +206,6 @@ export default function CreateCardPage() {
       <Sidebar />
       <main className="min-w-0 flex-1 p-5 md:p-8 xl:p-10">
         <div className="mb-7">
-          <Link href="/" className="mb-5 inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-blue-700"><ArrowLeft size={16} />Back to dashboard</Link>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700">Card setup</p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">{editingId ? "Edit card details" : "Create a digital card"}</h1>
           <p className="mt-2 text-sm text-slate-500">{editingId ? "Update the contact details shown on this card." : "Enter contact details to create a digital card and QR code."}</p>
@@ -209,27 +215,6 @@ export default function CreateCardPage() {
             {loadingCard && <p role="status" className="mb-5 rounded-lg bg-blue-50 p-3 text-sm text-blue-700">Loading card details...</p>}
             <div className="mb-6"><h2 className="text-lg font-bold">Personal & professional information</h2><p className="mt-1 text-sm text-slate-500">Fields marked with * are required.</p></div>
             <div className="grid gap-5 sm:grid-cols-2">
-              {userRole && userRole !== "EMPLOYEE" && (
-                <label className="sm:col-span-2">
-                  <span className="mb-2 block text-sm font-semibold text-slate-700">Branch <span className="font-normal text-slate-400">Optional</span></span>
-                  <select
-                    value={branchId}
-                    onChange={(event) => setBranchId(event.target.value)}
-                    disabled={!branchesLoaded}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-800 outline-none focus:border-blue-600 disabled:opacity-60"
-                  >
-                    <option value="">No branch — company-wide</option>
-                    {branches.filter((branch) => branch.status === "active" || branch.id === branchId).map((branch) => (
-                      <option key={branch.id} value={branch.id}>
-                        {branch.name}{branch.city ? ` · ${branch.city}` : ""}{branch.status === "inactive" ? " (inactive)" : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="mt-1 block text-xs text-slate-500">
-                    Create and manage branches from Company Management → Branches.
-                  </span>
-                </label>
-              )}
               {fields.map((field) => {
                 if (field.key === "mobile") {
                   const countryCodeError = fieldErrors.countryCode;
@@ -375,6 +360,21 @@ export default function CreateCardPage() {
                 </label>;
               })}
             </div>
+            <section aria-labelledby="card-logo-heading" className="mt-7 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+              <h2 id="card-logo-heading" className="text-sm font-semibold text-slate-800">Card logo</h2>
+              <p className="mt-1 text-xs leading-5 text-slate-500">Each card has its own logo. New cards start with the workspace logo, but changing it later won&apos;t change saved cards.</p>
+              <div className="mt-4 flex flex-wrap items-center gap-4">
+                <span className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white p-1">
+                  <Image src={form.logoData || DEFAULT_COMPANY_LOGO} alt="Card logo preview" width={48} height={48} unoptimized className="h-full w-full object-contain" />
+                </span>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+                  <Building2 size={16} />Choose card logo
+                  <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { void updateCardLogo(event); }} className="sr-only" />
+                </label>
+                <button type="button" onClick={() => update("logoData", companyLogo)} className="rounded-lg px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Use workspace logo</button>
+                <p className="w-full text-xs text-slate-500">PNG, JPEG, or WebP · maximum 500 KB</p>
+              </div>
+            </section>
             {error && <p role="alert" className="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
             <div className="mt-8 flex flex-wrap justify-end gap-3 border-t border-slate-100 pt-6"><Link href={editingId ? "/my-cards" : "/"} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancel</Link><button disabled={loading || loadingCard || !companySettingsLoaded} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"><Save size={17} />{loading ? (editingId ? "Saving changes..." : "Creating card...") : (editingId ? "Save changes" : "Create card")}</button></div>
           </form>

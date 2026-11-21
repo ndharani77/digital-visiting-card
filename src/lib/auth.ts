@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getDatabase } from "@/lib/db";
 import { readJsonPlatform, usesJsonStorage } from "@/lib/json-store";
+import { DEFAULT_USER_PREFERENCES, normalizeUserPreferences, type AppLocale } from "@/lib/user-preferences";
 import type { UserRole } from "@/lib/types";
 
 export const SESSION_COOKIE = "digital_card_session";
@@ -20,6 +21,7 @@ export type AuthUser = {
   companyId: string | null;
   employeeId: string | null;
   mustChangePassword: boolean;
+  locale: AppLocale;
 };
 
 export class AuthenticationError extends Error {
@@ -86,6 +88,7 @@ export async function authenticateUser(email: string, password: string): Promise
       companyId: account.companyId,
       employeeId: account.employeeId,
       mustChangePassword: account.mustChangePassword,
+      locale: normalizeUserPreferences(account.preferences).locale,
     };
   }
 
@@ -109,6 +112,7 @@ export async function authenticateUser(email: string, password: string): Promise
     companyId: record.company_id,
     employeeId: record.employee_id,
     mustChangePassword: record.must_change_password,
+    locale: DEFAULT_USER_PREFERENCES.locale,
   };
 }
 
@@ -121,6 +125,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       companyId: null,
       employeeId: null,
       mustChangePassword: false,
+      locale: DEFAULT_USER_PREFERENCES.locale,
     };
   }
 
@@ -152,6 +157,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       companyId: account.companyId,
       employeeId: account.employeeId,
       mustChangePassword: account.mustChangePassword,
+      locale: normalizeUserPreferences(account.preferences).locale,
     };
   }
 
@@ -174,6 +180,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     companyId: record.company_id,
     employeeId: record.employee_id,
     mustChangePassword: record.must_change_password,
+    locale: DEFAULT_USER_PREFERENCES.locale,
   };
 }
 
@@ -210,6 +217,12 @@ export function canManageCompany(user: AuthUser, companyId: string): boolean {
 
 export function canViewCompany(user: AuthUser, companyId: string): boolean {
   return user.role === "SUPER_ADMIN" || user.companyId === companyId;
+}
+
+export async function canAccessActiveCompany(user: AuthUser, companyId: string): Promise<boolean> {
+  if (user.role !== "SUPER_ADMIN") return canViewCompany(user, companyId);
+  const activeCompanyId = await getActiveCompanyId(user);
+  return !activeCompanyId || activeCompanyId === companyId;
 }
 
 export function canManageCard(user: AuthUser, companyId: string, employeeId: string): boolean {

@@ -27,6 +27,22 @@ export type EnquiryField = {
   required: boolean;
 };
 
+export type CompanyCustomTabField = {
+  id: string;
+  type: "heading" | "text" | "image" | "service";
+  content: string;
+  title?: string;
+  href?: string;
+  description?: string;
+  image?: string;
+};
+
+export type CompanyCustomTab = {
+  id: string;
+  title: string;
+  fields: CompanyCustomTabField[];
+};
+
 export type CompanyPreviewSettings = {
   whatsappMessage: string;
   labels: {
@@ -35,6 +51,7 @@ export type CompanyPreviewSettings = {
     whatsapp: string;
     email: string;
     share: string;
+    shareDialogTitle?: string;
     previous: string;
     next: string;
     footer: string;
@@ -44,6 +61,9 @@ export type CompanyPreviewSettings = {
     services: string;
     enquiry: string;
   };
+  tabOrder?: string[];
+  hiddenTabs?: string[];
+  customTabs?: CompanyCustomTab[];
   about: {
     kicker: string;
     title: string;
@@ -56,6 +76,7 @@ export type CompanyPreviewSettings = {
     sections: CompanyAboutSection[];
   };
   services: {
+    enabled?: boolean;
     title: string;
     moreLabel: string;
     moreLink: string;
@@ -77,6 +98,7 @@ export const DEFAULT_COMPANY_PREVIEW: CompanyPreviewSettings = {
     whatsapp: "WhatsApp",
     email: "Email",
     share: "Share",
+    shareDialogTitle: "Share this contact",
     previous: "Previous",
     next: "Next",
     footer: "Digital contact card · Powered by Card Reader",
@@ -86,6 +108,9 @@ export const DEFAULT_COMPANY_PREVIEW: CompanyPreviewSettings = {
     services: "Services",
     enquiry: "Enquiry",
   },
+  tabOrder: ["about", "services", "enquiry"],
+  hiddenTabs: [],
+  customTabs: [],
   about: {
     kicker: "Company profile",
     title: "Brihaspathi Technologies",
@@ -103,6 +128,7 @@ export const DEFAULT_COMPANY_PREVIEW: CompanyPreviewSettings = {
     sections: [],
   },
   services: {
+    enabled: true,
     title: "Our services",
     moreLabel: "More",
     moreLink: "https://brihaspathi.com/",
@@ -184,6 +210,59 @@ export function createDefaultCompanyPreview(companyName: string): CompanyPreview
   };
 }
 
+export function mergeCardPreviewWithCompanyDefaults(
+  companyPreview: CompanyPreviewSettings,
+  cardPreview?: CompanyPreviewSettings
+): CompanyPreviewSettings {
+  if (!cardPreview) return companyPreview;
+  const defaultServiceIds = new Set(companyPreview.services.items.map((service) => service.id));
+  const cardServices = cardPreview.services.items.filter((service) => !defaultServiceIds.has(service.id));
+  return {
+    ...companyPreview,
+    ...cardPreview,
+    tabs: {
+      ...companyPreview.tabs,
+      ...cardPreview.tabs,
+      services: companyPreview.tabs.services,
+    },
+    hiddenTabs: [...new Set([
+      ...(companyPreview.hiddenTabs ?? []),
+      ...(cardPreview.hiddenTabs ?? []),
+    ])],
+    services: {
+      ...companyPreview.services,
+      items: [...companyPreview.services.items, ...cardServices],
+    },
+  };
+}
+
+export function stripDefaultServicesFromCardPreview(
+  companyPreview: CompanyPreviewSettings,
+  cardPreview: CompanyPreviewSettings
+): CompanyPreviewSettings {
+  const defaultServiceIds = new Set(companyPreview.services.items.map((service) => service.id));
+  return {
+    ...cardPreview,
+    services: {
+      ...cardPreview.services,
+      items: cardPreview.services.items.filter((service) => !defaultServiceIds.has(service.id)),
+    },
+  };
+}
+
+export function getCompanyPreviewTabOrder(preview: CompanyPreviewSettings): string[] {
+  const knownIds = ["about", "services", "enquiry", ...(preview.customTabs ?? []).map((tab) => tab.id)];
+  const configuredIds = (preview.tabOrder ?? []).filter((id, index, ids) =>
+    knownIds.includes(id) && ids.indexOf(id) === index
+  );
+  return [...configuredIds, ...knownIds.filter((id) => !configuredIds.includes(id))];
+}
+
+export function isCompanyPreviewTabHidden(preview: CompanyPreviewSettings, tabId: string): boolean {
+  return (preview.hiddenTabs ?? []).includes(tabId) ||
+    (tabId === "services" && preview.services.enabled === false);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -218,6 +297,52 @@ function isLink(value: unknown) {
 
 export function isCompanyPreviewSettings(value: unknown): value is CompanyPreviewSettings {
   if (!isRecord(value) || !isRecord(value.labels) || !isRecord(value.tabs) || !isRecord(value.about) || !isRecord(value.services) || !isRecord(value.enquiry)) return false;
+  const customTabs = value.customTabs;
+  if (customTabs !== undefined && (
+    !Array.isArray(customTabs) ||
+    customTabs.length > 50 ||
+    !customTabs.every((tab) =>
+      isRecord(tab) &&
+      /^[\w-]{1,100}$/.test(typeof tab.id === "string" ? tab.id : "") &&
+      isText(tab.title, 100) &&
+      Array.isArray(tab.fields) &&
+      tab.fields.length <= 100 &&
+      tab.fields.every((field) =>
+        isRecord(field) &&
+        /^[\w-]{1,100}$/.test(typeof field.id === "string" ? field.id : "") &&
+        (field.type === "heading" || field.type === "text" || field.type === "image" || field.type === "service") &&
+        (field.type === "heading" ? isText(field.content, 200) :
+          field.type === "text" ? isText(field.content, 10_000) :
+            field.type === "image" ? isImageSource(field.content) :
+              isText(field.title, 200) &&
+              isLink(field.href) &&
+              isText(field.description, 10_000) &&
+              isImageSource(field.image))
+      ) &&
+      new Set(tab.fields.map((field) => isRecord(field) ? field.id : "")).size === tab.fields.length
+    )
+  )) return false;
+  const normalizedCustomTabs = Array.isArray(customTabs) ? customTabs : [];
+  const customTabIds = normalizedCustomTabs.map((tab) => isRecord(tab) ? String(tab.id) : "");
+  if (
+    new Set(customTabIds).size !== normalizedCustomTabs.length ||
+    customTabIds.some((id) => id === "about" || id === "services" || id === "enquiry")
+  ) return false;
+  const knownTabIds = ["about", "services", "enquiry", ...customTabIds];
+  if (value.tabOrder !== undefined) {
+    if (
+      !Array.isArray(value.tabOrder) ||
+      value.tabOrder.length !== knownTabIds.length ||
+      !value.tabOrder.every((id) => typeof id === "string" && knownTabIds.includes(id)) ||
+      new Set(value.tabOrder).size !== value.tabOrder.length
+    ) return false;
+  }
+  if (value.hiddenTabs !== undefined && (
+    !Array.isArray(value.hiddenTabs) ||
+    value.hiddenTabs.length > knownTabIds.length ||
+    !value.hiddenTabs.every((id) => typeof id === "string" && knownTabIds.includes(id)) ||
+    new Set(value.hiddenTabs).size !== value.hiddenTabs.length
+  )) return false;
   if (
     !isText(value.whatsappMessage, 2000) ||
     !isText(value.labels.call, 100) ||
@@ -225,6 +350,7 @@ export function isCompanyPreviewSettings(value: unknown): value is CompanyPrevie
     !isText(value.labels.whatsapp, 100) ||
     !isText(value.labels.email, 100) ||
     !isText(value.labels.share, 100) ||
+    (value.labels.shareDialogTitle !== undefined && !isText(value.labels.shareDialogTitle, 100)) ||
     !isText(value.labels.previous, 100) ||
     !isText(value.labels.next, 100) ||
     !isText(value.labels.footer, 200)
@@ -251,6 +377,7 @@ export function isCompanyPreviewSettings(value: unknown): value is CompanyPrevie
 
   const services = value.services;
   if (
+    (services.enabled !== undefined && typeof services.enabled !== "boolean") ||
     !isText(services.title, 200) ||
     !isText(services.moreLabel, 100) ||
     !isLink(services.moreLink) ||
@@ -292,10 +419,18 @@ export function normalizeCompanyPreviewSettings(value: unknown): CompanyPreviewS
   const about = isRecord(value.about) ? value.about : {};
   const services = isRecord(value.services) ? value.services : {};
   const enquiry = isRecord(value.enquiry) ? value.enquiry : {};
+  const customTabs = value.customTabs ?? DEFAULT_COMPANY_PREVIEW.customTabs;
+  const customTabIds = Array.isArray(customTabs)
+    ? customTabs.filter(isRecord).map((tab) => typeof tab.id === "string" ? tab.id : "")
+    : [];
+  const tabOrder = value.tabOrder ?? ["about", "services", "enquiry", ...customTabIds];
   const normalized = {
     ...DEFAULT_COMPANY_PREVIEW,
     ...value,
     tabs: { ...DEFAULT_COMPANY_PREVIEW.tabs, ...tabs },
+    tabOrder,
+    hiddenTabs: value.hiddenTabs ?? DEFAULT_COMPANY_PREVIEW.hiddenTabs,
+    customTabs,
     about: { ...DEFAULT_COMPANY_PREVIEW.about, ...about },
     services: { ...DEFAULT_COMPANY_PREVIEW.services, ...services },
     enquiry: { ...DEFAULT_COMPANY_PREVIEW.enquiry, ...enquiry },

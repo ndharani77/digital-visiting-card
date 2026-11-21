@@ -1,18 +1,196 @@
 @import "tailwindcss";
 
+:root {
+  --app-canvas: #f6f8fc;
+  --app-border: #e2e8f0;
+  --app-ink: #0f172a;
+  --app-muted: #64748b;
+  --company-brand-color: #07518a;
+  --company-brand-light: #2d83c5;
+  --company-brand-dark: #092f60;
+  --company-brand-muted: #557b9d;
+  --company-brand-subtle: #6b8aa8;
+  --company-sidebar-background: #101b31;
+}
+
+:root[data-company-theme="teal"] {
+  --company-sidebar-background: #103a37;
+  --company-brand-color: #0f766e;
+  --company-brand-light: #2dd4bf;
+  --company-brand-dark: #134e4a;
+  --company-brand-muted: #4e908a;
+  --company-brand-subtle: #629f99;
+  --color-blue-50: #f0fdfa;
+  --color-blue-100: #ccfbf1;
+  --color-blue-200: #99f6e4;
+  --color-blue-300: #5eead4;
+  --color-blue-400: #2dd4bf;
+  --color-blue-500: #14b8a6;
+  --color-blue-600: #0d9488;
+  --color-blue-700: #0f766e;
+  --color-blue-800: #115e59;
+  --color-blue-900: #134e4a;
+  --color-blue-950: #042f2e;
+}
+
+:root[data-company-theme="violet"] {
+  --company-sidebar-background: #261342;
+  --company-brand-color: #6d28d9;
+  --company-brand-light: #a78bfa;
+  --company-brand-dark: #4c1d95;
+  --company-brand-muted: #8967c5;
+  --company-brand-subtle: #9b83cc;
+  --color-blue-50: #f5f3ff;
+  --color-blue-100: #ede9fe;
+  --color-blue-200: #ddd6fe;
+  --color-blue-300: #c4b5fd;
+  --color-blue-400: #a78bfa;
+  --color-blue-500: #8b5cf6;
+  --color-blue-600: #7c3aed;
+  --color-blue-700: #6d28d9;
+  --color-blue-800: #5b21b6;
+  --color-blue-900: #4c1d95;
+  --color-blue-950: #2e1065;
+}
+
+:root[data-company-theme="rose"] {
+  --company-sidebar-background: #401426;
+  --company-brand-color: #be123c;
+  --company-brand-light: #fb7185;
+  --company-brand-dark: #881337;
+  --company-brand-muted: #c65a73;
+  --company-brand-subtle: #d1788c;
+  --color-blue-50: #fff1f2;
+  --color-blue-100: #ffe4e6;
+  --color-blue-200: #fecdd3;
+  --color-blue-300: #fda4af;
+  --color-blue-400: #fb7185;
+  --color-blue-500: #f43f5e;
+  --color-blue-600: #e11d48;
+  --color-blue-700: #be123c;
+  --color-blue-800: #9f1239;
+  --color-blue-900: #881337;
+  --color-blue-950: #4c0519;
+}
+
+:root[data-company-theme="amber"] {
+  --company-sidebar-background: #3d2b16;
+  --company-brand-color: #b45309;
+  --company-brand-light: #fbbf24;
+  --company-brand-dark: #78350f;
+  --company-brand-muted: #b16d2a;
+  --company-brand-subtle: #c18b52;
+  --color-blue-50: #fffbeb;
+  --color-blue-100: #fef3c7;
+  --color-blue-200: #fde68a;
+  --color-blue-300: #fcd34d;
+  --color-blue-400: #fbbf24;
+  --color-blue-500: #f59e0b;
+  --color-blue-600: #d97706;
+  --color-blue-700: #b45309;
+  --color-blue-800: #92400e;
+  --color-blue-900: #78350f;
+  --color-blue-950: #451a03;
+}
+
+.company-brand-text { color: var(--company-brand-color); }
+.company-brand-text-muted { color: var(--company-brand-muted); }
+.company-brand-text-subtle { color: var(--company-brand-subtle); }
+.company-brand-hover:hover { color: var(--company-brand-color); }
+.company-brand-border { border-color: var(--company-brand-color); }
+
+html[data-display-density="compact"] .dashboard-stat-card,
+html[data-display-density="compact"] .dashboard-card-tile {
+  padding: 1rem;
+}
+
+html[data-display-density="compact"] .dashboard-card-grid {
+  gap: 0.75rem;
+}
+
+html[data-display-density="compact"] .dashboard-card-search {
+  margin-bottom: 1.25rem;
+  padding: 0.5rem;
+}
+
 * { box-sizing: border-box; }
 html { min-height: 100%; scroll-behavior: smooth; }
 body {
   margin: 0;
   min-height: 100%;
-  background: #f4f7fb;
-  color: #0f172a;
+  background: var(--app-canvas);
+  color: var(--app-ink);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 button, a { transition: color .15s ease, background-color .15s ease, border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
 button:not(:disabled) { cursor: pointer; }
+button:not(:disabled):active { transform: translateY(1px); }
+button:disabled { cursor: not-allowed; }
+main input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+main select,
+main textarea {
+  border-radius: 0.75rem;
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+main input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
+main select:focus,
+main textarea:focus {
+  border-color: var(--company-brand-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--company-brand-color) 14%, transparent);
+}
+main > div > header h1 {
+  color: var(--app-ink);
+  font-size: clamp(1.75rem, 2.5vw, 2rem);
+  font-weight: 750;
+  line-height: 1.15;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+main > div > header p[class*="uppercase"] {
+  color: var(--company-brand-color);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+main > div > header > p {
+  text-wrap: pretty;
+}
+main > div > header h1 + p {
+  color: var(--app-muted);
+  font-size: 0.9375rem;
+}
+main :is(section, article, form)[class*="rounded-2xl"][class*="border"][class*="bg-white"] {
+  border-color: var(--app-border);
+}
+.workspace-route-content > div[class*="min-h-screen"] {
+  min-height: calc(100vh - 68px);
+}
+@media (min-width: 768px) {
+  .workspace-route-content > div[class*="min-h-screen"] {
+    min-height: calc(100vh - 64px);
+  }
+}
+main table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+main thead {
+  background-color: #f8fafc;
+}
+main th {
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+}
+main tbody tr {
+  transition: background-color .15s ease;
+}
+main tbody tr:hover {
+  background-color: #f8fafc;
+}
 ::selection { background: #bfdbfe; color: #102c57; }
 :focus-visible { outline: 3px solid rgb(59 130 246 / 55%); outline-offset: 2px; }
 :is(.create-card-form, .dashboard-card-search) :is(input, textarea):focus-visible { outline: none; }

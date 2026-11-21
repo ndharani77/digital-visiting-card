@@ -34,6 +34,7 @@ export async function POST(request: Request) {
         companyId: user.companyId,
         employeeId: user.employeeId,
         mustChangePassword: user.mustChangePassword,
+        locale: user.locale,
       },
     });
     response.cookies.set(SESSION_COOKIE, await createSessionToken(user), {

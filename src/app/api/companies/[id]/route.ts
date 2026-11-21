@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { authFailureResponse } from "@/lib/api-auth";
-import { canManageCompany, requireCompanyAdmin, requireUser } from "@/lib/auth";
+import { canAccessActiveCompany, canManageCompany, requireCompanyAdmin, requireUser } from "@/lib/auth";
 import { isCompanyPreviewSettings } from "@/lib/company-content";
 import { getCompany, updateCompany, type CompanyInput } from "@/lib/platform-store";
 
@@ -61,7 +61,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     return authFailureResponse(error) ?? NextResponse.json({ message: "Unable to authorize this request." }, { status: 500 });
   }
   const { id } = await context.params;
-  if (!canManageCompany(user, id)) {
+  if (!canManageCompany(user, id) || !(await canAccessActiveCompany(user, id))) {
     return NextResponse.json({ message: "You cannot manage this company." }, { status: 403 });
   }
 

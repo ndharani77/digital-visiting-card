@@ -60,7 +60,7 @@ export default function EnquiryForm({
               </label>
             ))}
           </div>
-          <button type="submit" className="mt-8 rounded border border-slate-900 px-4 py-2 text-sm font-semibold text-slate-900 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
+          <button type="submit" className="mt-8 rounded border border-blue-700 bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
             {settings.submitLabel}
           </button>
         </fieldset>

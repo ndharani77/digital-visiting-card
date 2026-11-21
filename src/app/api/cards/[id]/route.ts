@@ -3,7 +3,6 @@ import { authFailureResponse } from "@/lib/api-auth";
 import { requireUser } from "@/lib/auth";
 import { validateCardFields } from "@/lib/card-validation";
 import {
-  BranchAssignmentError,
   deleteCardForUser,
   getCardForUser,
   getCompanySettings,
@@ -52,15 +51,12 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     if (!current) return NextResponse.json({ message: "Visiting card not found." }, { status: 404 });
     const settings = await getCompanySettings(user, current.companyId);
     const data = body as Record<string, unknown>;
-    if ("branchId" in data && user.role === "EMPLOYEE") {
-      return NextResponse.json({ message: "Only company administrators can change a card's branch." }, { status: 403 });
-    }
-    if ("branchId" in data && data.branchId !== null && typeof data.branchId !== "string") {
-      return NextResponse.json({ message: "Choose a valid branch." }, { status: 400 });
+    if ("branchId" in data) {
+      return NextResponse.json({ message: "Branches are not supported." }, { status: 400 });
     }
     if (data.countryCode === undefined) data.countryCode = "+91";
     data.company = settings.companyName;
-    data.logoData = settings.logoData;
+    if (!("logoData" in data)) data.logoData = current.logoData ?? settings.logoData;
     data.website = settings.website;
     const errors = validateCardFields(data);
     if (Object.keys(errors).length > 0) {
@@ -78,20 +74,15 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       address: optionalText("address"),
       linkedin: optionalText("linkedin"),
       linkedinName: optionalText("linkedinName"),
-      ...(Object.prototype.hasOwnProperty.call(data, "branchId")
-        ? { branchId: typeof data.branchId === "string" && data.branchId ? data.branchId : null }
-        : {}),
+      logoData: String(data.logoData),
     });
     if (!card) return NextResponse.json({ message: "Visiting card not found." }, { status: 404 });
     return NextResponse.json(card);
   } catch (error) {
     const authResponse = authFailureResponse(error);
     if (authResponse) return authResponse;
-    if (error instanceof BranchAssignmentError) {
-      return NextResponse.json({ message: error.message }, { status: 400 });
-    }
     if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
-      return NextResponse.json({ message: "An employee with this email or employee code already exists in this company." }, { status: 409 });
+      return NextResponse.json({ message: "A card with this email already exists in this company." }, { status: 409 });
     }
     console.error("Unable to update visiting card:", error);
     return NextResponse.json({ message: "Unable to update visiting card." }, { status: 500 });

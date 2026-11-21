@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, CheckCircle2, CirclePause, CreditCard, QrCode } from "lucide-react";
+import { ArrowUpRight, CheckCircle2, CirclePause, CreditCard, QrCode, Search, X } from "lucide-react";
 import CardActions from "@/components/CardActions";
 import type { VisitingCard } from "@/lib/types";
 import type { UserRole } from "@/lib/types";
@@ -11,12 +11,45 @@ type CardFilter = "all" | "active" | "inactive";
 
 export default function MyCardsStatusFilter({ cards, role }: { cards: VisitingCard[]; role: UserRole }) {
   const [filter, setFilter] = useState<CardFilter>("all");
+  const [query, setQuery] = useState("");
   const activeCards = cards.filter((card) => card.isActive);
   const inactiveCards = cards.filter((card) => !card.isActive);
+  const normalizedQuery = query.trim().toLowerCase();
+  const matchingCards = normalizedQuery
+    ? cards.filter((card) => [
+      card.id,
+      card.fullName,
+      card.designation,
+      card.company,
+      card.email,
+      card.mobile,
+      card.branchName ?? "",
+    ].some((value) => value.toLowerCase().includes(normalizedQuery)))
+    : cards;
+  const matchingActiveCards = matchingCards.filter((card) => card.isActive);
+  const matchingInactiveCards = matchingCards.filter((card) => !card.isActive);
 
   return (
     <>
-      <section aria-label="Filter cards by status" className="mb-9 grid gap-4 sm:grid-cols-3">
+      <div className="mb-6 max-w-xl">
+        <label htmlFor="visiting-card-search" className="sr-only">Search visiting cards</label>
+        <div className="relative">
+          <Search size={18} aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            id="visiting-card-search"
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search by name, title, company, email, or phone"
+            className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-11 text-sm text-slate-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+          />
+          {query && <button type="button" onClick={() => setQuery("")} aria-label="Clear card search" className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+            <X size={16} aria-hidden="true" />
+          </button>}
+        </div>
+      </div>
+
+      <section aria-label="Filter cards by status" className="dashboard-card-grid mb-9 grid gap-4 sm:grid-cols-3">
         <SummaryCard
           icon={<CreditCard size={20} />}
           label="Total cards"
@@ -44,17 +77,26 @@ export default function MyCardsStatusFilter({ cards, role }: { cards: VisitingCa
       </section>
 
       <div className="space-y-10">
-        {(filter === "all" || filter === "active") && activeCards.length > 0 && (
-          <CardSection title="Active cards" cards={activeCards} isActive role={role} />
+        {(filter === "all" || filter === "active") && matchingActiveCards.length > 0 && (
+          <CardSection title="Active cards" cards={matchingActiveCards} isActive role={role} />
         )}
-        {(filter === "all" || filter === "inactive") && inactiveCards.length > 0 && (
-          <CardSection title="Inactive cards" cards={inactiveCards} isActive={false} role={role} />
+        {(filter === "all" || filter === "inactive") && matchingInactiveCards.length > 0 && (
+          <CardSection title="Inactive cards" cards={matchingInactiveCards} isActive={false} role={role} />
         )}
-        {filter === "active" && activeCards.length === 0 && (
+        {normalizedQuery && matchingCards.length === 0 && (
+          <p role="status" className="rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-600">No visiting cards match “{query.trim()}”.</p>
+        )}
+        {!normalizedQuery && filter === "active" && activeCards.length === 0 && (
           <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-600">There are no active cards. Reactivate one from the Inactive cards section.</p>
         )}
-        {filter === "inactive" && inactiveCards.length === 0 && (
+        {normalizedQuery && filter === "active" && matchingCards.length > 0 && matchingActiveCards.length === 0 && (
+          <p role="status" className="rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-600">No active cards match your search.</p>
+        )}
+        {!normalizedQuery && filter === "inactive" && inactiveCards.length === 0 && (
           <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-600">There are no inactive cards.</p>
+        )}
+        {normalizedQuery && filter === "inactive" && matchingCards.length > 0 && matchingInactiveCards.length === 0 && (
+          <p role="status" className="rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-600">No inactive cards match your search.</p>
         )}
       </div>
     </>
@@ -87,7 +129,7 @@ function SummaryCard({
       type="button"
       aria-pressed={selected}
       onClick={onClick}
-      className={`flex w-full items-center gap-4 rounded-2xl border bg-white p-5 text-left shadow-sm shadow-slate-900/[0.02] transition hover:-translate-y-0.5 hover:shadow-md ${
+      className={`dashboard-stat-card flex w-full items-center gap-4 rounded-2xl border bg-white p-5 text-left shadow-sm shadow-slate-900/[0.02] transition hover:-translate-y-0.5 hover:shadow-md ${
         selected ? "border-blue-300 ring-2 ring-blue-100" : "border-slate-200/80 hover:border-slate-300"
       }`}
     >
@@ -110,11 +152,11 @@ function CardSection({ title, cards, isActive, role }: { title: string; cards: V
         </div>
         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{cards.length}</span>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="dashboard-card-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {cards.map((card) => (
-          <article key={card.id} className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-900/[0.03] transition duration-200 hover:-translate-y-1 hover:border-blue-200 hover:shadow-xl hover:shadow-slate-900/[0.08]">
+          <article key={card.id} className="dashboard-card-tile group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-900/[0.03] transition duration-200 hover:-translate-y-1 hover:border-blue-200 hover:shadow-xl hover:shadow-slate-900/[0.08]">
             <div className="absolute right-3 top-3 z-10"><CardActions cardId={card.id} cardName={card.fullName} isActive={card.isActive} role={role} /></div>
-            <Link href={`/card/${card.id}/view`} className="block">
+            <Link href={`/card/${card.id}?source=qr`} aria-label={`Preview ${card.fullName}'s scanned visiting card`} className="block">
               <div className="mb-5 flex items-center justify-between pr-10">
                 <span className={`flex h-12 w-12 items-center justify-center rounded-2xl ${isActive ? "bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-800" : "bg-slate-100 text-slate-500"}`}>
                   <CreditCard size={22} />
@@ -127,11 +169,10 @@ function CardSection({ title, cards, isActive, role }: { title: string; cards: V
               <h3 className="truncate text-base font-bold tracking-tight text-slate-950">{card.fullName}</h3>
               <p className="mt-1 truncate text-sm font-medium text-slate-600">{card.designation}</p>
               <p className="mt-1 truncate text-sm text-slate-500">{card.company}</p>
-              {card.branchName && <p className="mt-1 truncate text-xs font-medium text-blue-700">Branch: {card.branchName}</p>}
-              <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4 text-sm font-semibold text-blue-700 group-hover:text-blue-800">
-                <span>View QR code</span>
-                <span className="flex items-center gap-2"><QrCode size={17} /><ArrowUpRight size={16} /></span>
-              </div>
+            </Link>
+            <Link href={`/card/${card.id}/view`} className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4 text-sm font-semibold text-blue-700 hover:text-blue-800">
+              <span>View QR code</span>
+              <span className="flex items-center gap-2"><QrCode size={17} /><ArrowUpRight size={16} /></span>
             </Link>
           </article>
         ))}

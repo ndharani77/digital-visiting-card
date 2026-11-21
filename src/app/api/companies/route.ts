@@ -1,8 +1,9 @@
+import { hash } from "bcryptjs";
 import { NextResponse } from "next/server";
 import { authFailureResponse } from "@/lib/api-auth";
-import { requireUser } from "@/lib/auth";
+import { requireCompanyAdmin, requireUser } from "@/lib/auth";
 import { createDefaultCompanyPreview, isCompanyPreviewSettings } from "@/lib/company-content";
-import { createCompany, listCompanies, type CompanyInput } from "@/lib/platform-store";
+import { createCompanyWithAdmin, listCompanies, type CompanyInput } from "@/lib/platform-store";
 
 export const runtime = "nodejs";
 
@@ -49,6 +50,7 @@ function parseCompanyInput(value: unknown): CompanyInput | string {
 export async function GET() {
   try {
     const user = await requireUser();
+    requireCompanyAdmin(user);
     return NextResponse.json(await listCompanies(user));
   } catch (error) {
     const authResponse = authFailureResponse(error);
@@ -77,10 +79,29 @@ export async function POST(request: Request) {
   }
   const input = parseCompanyInput(body);
   if (typeof input === "string") return NextResponse.json({ message: input }, { status: 400 });
+  const data = body as Record<string, unknown>;
+  const adminEmail = typeof data.adminEmail === "string" ? data.adminEmail.trim().toLowerCase() : "";
+  const adminPassword = typeof data.adminPassword === "string" ? data.adminPassword : "";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) {
+    return NextResponse.json({ message: "Enter a valid Company Admin email address." }, { status: 400 });
+  }
+  if (adminPassword.length < 14 || Buffer.byteLength(adminPassword, "utf8") > 72) {
+    return NextResponse.json({ message: "Admin password must be at least 14 characters and no more than 72 bytes." }, { status: 400 });
+  }
   try {
-    return NextResponse.json(await createCompany(input), { status: 201 });
+    const result = await createCompanyWithAdmin(user, input, {
+      email: adminEmail,
+      passwordHash: await hash(adminPassword, 12),
+    });
+    if (result.kind === "duplicate-admin") {
+      return NextResponse.json({ message: "An account with this Company Admin email already exists." }, { status: 409 });
+    }
+    return NextResponse.json({ ...result.company, adminEmail }, { status: 201 });
   } catch (error) {
     console.error("Unable to create company:", error);
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
+      return NextResponse.json({ message: "An account with this Company Admin email already exists." }, { status: 409 });
+    }
     return NextResponse.json({ message: "Unable to create company." }, { status: 500 });
   }
 }

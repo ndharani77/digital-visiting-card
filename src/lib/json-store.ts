@@ -10,6 +10,13 @@ import {
   DEFAULT_WEBSITE,
 } from "@/lib/card-defaults";
 import { createDefaultCompanyPreview, normalizeCompanyPreviewSettings } from "@/lib/company-content";
+import {
+  DEFAULT_CARD_APPEARANCE,
+  DEFAULT_COMPANY_THEME,
+  normalizeCardAppearance,
+  normalizeCompanyTheme,
+} from "@/lib/company-theme";
+import { normalizeUserPreferences, type UserPreferences } from "@/lib/user-preferences";
 import type { CompanyRecord } from "@/lib/platform-store";
 import type { UserRole, VisitingCard } from "@/lib/types";
 
@@ -37,6 +44,7 @@ export type JsonUser = {
   status: "active" | "inactive";
   mustChangePassword: boolean;
   createdAt: string;
+  preferences?: UserPreferences;
 };
 
 export type JsonBranch = {
@@ -53,13 +61,24 @@ export type JsonBranch = {
   updatedAt: string;
 };
 
+export type JsonActivityLog = {
+  id: string;
+  companyId: string;
+  actorUserId: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  createdAt: string;
+};
+
 export type JsonPlatformState = {
-  version: 2;
+  version: 3;
   companies: CompanyRecord[];
   branches: JsonBranch[];
   employees: JsonEmployee[];
   users: JsonUser[];
   cards: VisitingCard[];
+  activityLogs: JsonActivityLog[];
 };
 
 const dataDirectory = path.join(process.cwd(), "data");
@@ -69,7 +88,7 @@ const legacySettingsFile = path.join(dataDirectory, "company-settings.json");
 const writeQueue = globalThis as typeof globalThis & { __jsonPlatformWriteQueue?: Promise<void> };
 
 export function usesJsonStorage(): boolean {
-  return process.env.NODE_ENV === "development" && process.env.STORAGE_DRIVER === "json";
+  return true;
 }
 
 async function withJsonLock<T>(operation: () => Promise<T>): Promise<T> {
@@ -107,17 +126,6 @@ async function writeState(state: JsonPlatformState): Promise<void> {
   }
 }
 
-function isPlatformState(value: unknown): value is JsonPlatformState {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const state = value as Record<string, unknown>;
-  return state.version === 2 &&
-    Array.isArray(state.companies) &&
-    Array.isArray(state.branches) &&
-    Array.isArray(state.employees) &&
-    Array.isArray(state.users) &&
-    Array.isArray(state.cards);
-}
-
 async function createInitialState(): Promise<JsonPlatformState> {
   const [legacyCards, legacySettings] = await Promise.all([
     readLegacyFile(legacyCardsFile),
@@ -153,6 +161,8 @@ async function createInitialState(): Promise<JsonPlatformState> {
     description: "",
     status: "active",
     preview: normalizeCompanyPreviewSettings(settings.preview) ?? createDefaultCompanyPreview(companyName),
+    theme: DEFAULT_COMPANY_THEME,
+    cardAppearance: DEFAULT_CARD_APPEARANCE,
   };
   const employees = new Map<string, JsonEmployee>();
   const ids = new Set<string>();
@@ -203,13 +213,159 @@ async function createInitialState(): Promise<JsonPlatformState> {
   });
 
   return {
-    version: 2,
+    version: 3,
     companies: [company],
     branches: [],
     employees: [...employees.values()],
     users: [],
     cards,
+    activityLogs: [],
   };
+}
+
+function migrateCompanyOwnership(state: JsonPlatformState): boolean {
+  const companyIds = new Set<string>();
+  for (const company of state.companies) {
+    if (!company.id || !company.name?.trim() || companyIds.has(company.id)) {
+      throw new Error("Company records in data/platform.json must have unique IDs and names.");
+    }
+    companyIds.add(company.id);
+  }
+  const soleCompanyId = state.companies.length === 1 ? state.companies[0].id : undefined;
+  let changed = false;
+  for (const company of state.companies) {
+    const theme = normalizeCompanyTheme(company.theme);
+    if (company.theme !== theme) {
+      company.theme = theme;
+      changed = true;
+    }
+    const cardAppearance = normalizeCardAppearance(company.cardAppearance);
+    if (company.cardAppearance !== cardAppearance) {
+      company.cardAppearance = cardAppearance;
+      changed = true;
+    }
+  }
+
+  function resolveCompanyId(
+    record: { id?: unknown; companyId?: unknown; company?: unknown },
+    linkedCompanyIds: Set<string> = new Set()
+  ): string {
+    if (typeof record.companyId === "string" && record.companyId && !companyIds.has(record.companyId)) {
+      const recordId = typeof record.id === "string" ? record.id : "unknown";
+      throw new Error(`Record "${recordId}" references an unknown company. Resolve it in data/platform.json and restart.`);
+    }
+    const id = typeof record.companyId === "string" && companyIds.has(record.companyId)
+      ? record.companyId
+      : undefined;
+    const linked = linkedCompanyIds.size === 1 ? [...linkedCompanyIds][0] : undefined;
+    const companyName = typeof record.company === "string" ? record.company.trim().toLowerCase() : undefined;
+    const nameMatches = companyName
+      ? state.companies.filter((company) => company.name.trim().toLowerCase() === companyName)
+      : [];
+    const named = nameMatches.length === 1 ? nameMatches[0].id : undefined;
+    if (id && linkedCompanyIds.size === 1 && !linkedCompanyIds.has(id)) {
+      const recordId = typeof record.id === "string" ? record.id : "unknown";
+      throw new Error(`Record "${recordId}" has conflicting company ownership. Resolve it in data/platform.json and restart.`);
+    }
+    const resolved = id ?? linked ?? named ?? soleCompanyId;
+    if (!resolved) {
+      const recordId = typeof record.id === "string" ? record.id : "unknown";
+      throw new Error(`Cannot safely assign company ownership to record "${recordId}". Resolve its company in data/platform.json and restart.`);
+    }
+    if (linkedCompanyIds.size > 1) {
+      const recordId = typeof record.id === "string" ? record.id : "unknown";
+      throw new Error(`Record "${recordId}" is linked to multiple companies. Resolve its ownership in data/platform.json and restart.`);
+    }
+    if (record.companyId !== resolved) {
+      record.companyId = resolved;
+      changed = true;
+    }
+    return resolved;
+  }
+
+  const cardCompaniesByEmployee = new Map<string, Set<string>>();
+  const companyByEmployee = new Map<string, string>();
+  for (const card of state.cards) {
+    const companyId = resolveCompanyId(card);
+    if (typeof card.employeeId !== "string" || !card.employeeId) {
+      const email = typeof card.email === "string" ? card.email.trim().toLowerCase() : "";
+      const matchingEmployees = email
+        ? state.employees.filter((employee) =>
+            employee.email.trim().toLowerCase() === email &&
+            (!employee.companyId || employee.companyId === companyId)
+          )
+        : [];
+      if (matchingEmployees.length > 1) {
+        throw new Error(`Card "${card.id}" matches multiple employees. Resolve its employee in data/platform.json and restart.`);
+      }
+      card.employeeId = matchingEmployees[0]?.id || randomUUID();
+      changed = true;
+    }
+    const linked = cardCompaniesByEmployee.get(card.employeeId) ?? new Set<string>();
+    linked.add(companyId);
+    cardCompaniesByEmployee.set(card.employeeId, linked);
+    companyByEmployee.set(card.employeeId, companyId);
+  }
+
+  const knownEmployeeIds = new Set(state.employees.map((employee) => employee.id));
+  for (const card of state.cards) {
+    if (!card.employeeId || knownEmployeeIds.has(card.employeeId)) continue;
+    const companyId = companyByEmployee.get(card.employeeId);
+    if (!companyId) throw new Error(`Card "${card.id}" has no company assignment.`);
+    state.employees.push({
+      id: card.employeeId,
+      companyId,
+      fullName: card.fullName ?? "",
+      designation: card.designation ?? "",
+      countryCode: card.countryCode ?? "+91",
+      mobile: card.mobile ?? "",
+      email: typeof card.email === "string" ? card.email.trim().toLowerCase() : "",
+      address: card.address ?? "",
+      linkedin: card.linkedin ?? "",
+      linkedinName: card.linkedinName ?? "",
+      status: card.isActive === false ? "inactive" : "active",
+    });
+    knownEmployeeIds.add(card.employeeId);
+    changed = true;
+  }
+
+  const employeeCompanies = new Map<string, string>();
+  for (const employee of state.employees) {
+    if (!employee.id) throw new Error("Employee records in data/platform.json must have IDs.");
+    const linked = cardCompaniesByEmployee.get(employee.id) ?? new Set<string>();
+    const companyId = resolveCompanyId(employee, linked);
+    employeeCompanies.set(employee.id, companyId);
+  }
+
+  for (const user of state.users) {
+    const preferences = normalizeUserPreferences(user.preferences);
+    if (JSON.stringify(user.preferences) !== JSON.stringify(preferences)) {
+      user.preferences = preferences;
+      changed = true;
+    }
+    if (user.role === "SUPER_ADMIN") continue;
+    const linked = user.employeeId ? employeeCompanies.get(user.employeeId) : undefined;
+    if (user.role === "EMPLOYEE" && !linked) {
+      throw new Error(`Employee account "${user.id}" has no matching employee record. Resolve it in data/platform.json and restart.`);
+    }
+    if (user.role === "COMPANY_ADMIN" && user.employeeId) {
+      throw new Error(`Company Admin account "${user.id}" cannot be linked to an employee.`);
+    }
+    const matchingCompanyIds = new Set<string>();
+    if (linked) {
+      matchingCompanyIds.add(linked);
+    } else if (typeof user.companyId !== "string" || !companyIds.has(user.companyId)) {
+      for (const company of state.companies.filter((item) =>
+        item.email.trim().toLowerCase() === user.email.trim().toLowerCase()
+      )) matchingCompanyIds.add(company.id);
+    }
+    resolveCompanyId(user, matchingCompanyIds);
+  }
+
+  for (const branch of state.branches) resolveCompanyId(branch);
+  for (const log of state.activityLogs) resolveCompanyId(log);
+
+  return changed;
 }
 
 async function loadState(): Promise<JsonPlatformState> {
@@ -220,29 +376,43 @@ async function loadState(): Promise<JsonPlatformState> {
     await writeState(initialState);
     return initialState;
   }
-  if (
-    existing &&
-    typeof existing === "object" &&
-    !Array.isArray(existing) &&
-    (existing as Record<string, unknown>).version === 1 &&
-    Array.isArray((existing as Record<string, unknown>).companies) &&
-    Array.isArray((existing as Record<string, unknown>).employees) &&
-    Array.isArray((existing as Record<string, unknown>).users) &&
-    Array.isArray((existing as Record<string, unknown>).cards)
-  ) {
-    const legacy = existing as Omit<JsonPlatformState, "version" | "branches">;
-    const upgraded: JsonPlatformState = {
-      ...legacy,
-      version: 2,
-      branches: [],
-    };
-    await writeState(upgraded);
-    return upgraded;
-  }
-  if (!isPlatformState(existing)) {
+  if (!existing || typeof existing !== "object" || Array.isArray(existing)) {
     throw new Error("data/platform.json has an unsupported or invalid format.");
   }
-  return existing;
+  const source = existing as Record<string, unknown>;
+  if (![1, 2, 3].includes(Number(source.version)) ||
+      !Array.isArray(source.companies) ||
+      !Array.isArray(source.employees) ||
+      !Array.isArray(source.users) ||
+      !Array.isArray(source.cards)) {
+    throw new Error("data/platform.json has an unsupported or invalid format.");
+  }
+  if ((source.branches !== undefined && !Array.isArray(source.branches)) ||
+      (source.activityLogs !== undefined && !Array.isArray(source.activityLogs))) {
+    throw new Error("data/platform.json has an unsupported or invalid format.");
+  }
+
+  const migrated: JsonPlatformState = {
+    version: 3,
+    companies: source.companies as CompanyRecord[],
+    branches: Array.isArray(source.branches) ? source.branches as JsonBranch[] : [],
+    employees: source.employees as JsonEmployee[],
+    users: source.users as JsonUser[],
+    cards: source.cards as VisitingCard[],
+    activityLogs: Array.isArray(source.activityLogs) ? source.activityLogs as JsonActivityLog[] : [],
+  };
+  const ownershipChanged = migrateCompanyOwnership(migrated);
+  if (source.version !== 3 || ownershipChanged || !Array.isArray(source.activityLogs)) {
+    const backupDirectory = path.join(dataDirectory, "backups");
+    const backupFile = path.join(
+      backupDirectory,
+      `platform-v${String(source.version)}-${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID()}.json`
+    );
+    await fs.mkdir(backupDirectory, { recursive: true });
+    await fs.copyFile(platformFile, backupFile);
+    await writeState(migrated);
+  }
+  return migrated;
 }
 
 export async function readJsonPlatform(): Promise<JsonPlatformState> {

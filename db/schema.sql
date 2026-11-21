@@ -106,6 +106,7 @@ CREATE TABLE IF NOT EXISTS cards (
   website TEXT NOT NULL DEFAULT '',
   linkedin TEXT NOT NULL DEFAULT '',
   linkedin_name VARCHAR(100) NOT NULL DEFAULT '',
+  logo_data TEXT NOT NULL DEFAULT '',
   is_active BOOLEAN NOT NULL DEFAULT true,
   branch_id UUID REFERENCES branches(id) ON DELETE SET NULL,
   preview JSONB,
@@ -116,6 +117,12 @@ CREATE TABLE IF NOT EXISTS cards (
 );
 
 ALTER TABLE cards ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES branches(id) ON DELETE SET NULL;
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS logo_data TEXT NOT NULL DEFAULT '';
+
+UPDATE cards c
+SET logo_data = co.logo_data
+FROM companies co
+WHERE co.id = c.company_id AND c.logo_data = '';
 
 CREATE INDEX IF NOT EXISTS cards_company_created_idx
   ON cards (company_id, created_at DESC);

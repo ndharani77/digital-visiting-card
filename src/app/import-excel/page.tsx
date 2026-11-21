@@ -2,7 +2,7 @@
 
 import { useState, type ChangeEvent } from "react";
 import Link from "next/link";
-import { ArrowLeft, Download, FileSpreadsheet, QrCode, Upload } from "lucide-react";
+import { Download, FileSpreadsheet, QrCode, Upload } from "lucide-react";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
 import { readSheet, type Row } from "read-excel-file/browser";
 import Sidebar from "@/components/Sidebar";
@@ -11,7 +11,6 @@ import {
   DEFAULT_CARD_ACCENT,
   DEFAULT_CARD_BACKGROUND,
   DEFAULT_COMPANY,
-  DEFAULT_COMPANY_LOGO,
   DEFAULT_WEBSITE,
 } from "@/lib/card-defaults";
 
@@ -104,7 +103,6 @@ function rowErrors(contact: ContactDetails) {
     ...contact,
     company: DEFAULT_COMPANY,
     website: DEFAULT_WEBSITE,
-    logoData: DEFAULT_COMPANY_LOGO,
     backgroundColor: DEFAULT_CARD_BACKGROUND,
     accentColor: DEFAULT_CARD_ACCENT,
   });
@@ -188,7 +186,6 @@ export default function ImportExcelPage() {
             ...row.contact,
             company: DEFAULT_COMPANY,
             website: DEFAULT_WEBSITE,
-            logoData: DEFAULT_COMPANY_LOGO,
             backgroundColor: DEFAULT_CARD_BACKGROUND,
             accentColor: DEFAULT_CARD_ACCENT,
           }),
@@ -229,7 +226,6 @@ export default function ImportExcelPage() {
       <Sidebar />
       <main className="min-w-0 flex-1 p-5 md:p-8 xl:p-10">
         <div className="mx-auto max-w-4xl">
-          <Link href="/" className="mb-5 inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-blue-600"><ArrowLeft size={16} />Back to dashboard</Link>
           <header className="mb-7">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700">Bulk management</p>
             <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Import contacts</h1>

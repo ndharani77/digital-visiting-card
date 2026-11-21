@@ -16,9 +16,9 @@ export default function CardPreviewPdfDownload({
       title="Download the complete card preview as a PDF"
       onClick={onClick}
       disabled={isLoading}
-      className="flex min-w-0 flex-col items-center gap-1.5 px-0.5 text-[11px] font-medium text-slate-700 hover:text-[#07518a] disabled:cursor-wait disabled:opacity-60"
+      className="company-brand-hover flex min-w-0 flex-col items-center gap-1.5 px-0.5 text-[11px] font-medium text-slate-700 disabled:cursor-wait disabled:opacity-60"
     >
-      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-[#07518a]">
+      <span className="company-brand-text flex h-10 w-10 items-center justify-center rounded-full bg-slate-100">
         {isLoading ? <LoaderCircle size={18} className="animate-spin" aria-hidden="true" /> : <Download size={18} aria-hidden="true" />}
       </span>
       <span>{isLoading ? "Creating…" : "PDF"}</span>

@@ -10,6 +10,14 @@ import {
   normalizeCompanyPreviewSettings,
   type CompanyPreviewSettings,
 } from "@/lib/company-content";
+import {
+  DEFAULT_CARD_APPEARANCE,
+  DEFAULT_COMPANY_THEME,
+  normalizeCardAppearance,
+  normalizeCompanyTheme,
+  type CardAppearance,
+  type CompanyTheme,
+} from "@/lib/company-theme";
 
 export type { CompanyPreviewSettings } from "@/lib/company-content";
 
@@ -18,6 +26,8 @@ export type CompanySettings = {
   website: string;
   logoData: string;
   preview: CompanyPreviewSettings;
+  theme: CompanyTheme;
+  cardAppearance: CardAppearance;
 };
 
 const dataDirectory = path.join(process.cwd(), "data");
@@ -31,6 +41,8 @@ const defaults: CompanySettings = {
   website: DEFAULT_WEBSITE,
   logoData: DEFAULT_COMPANY_LOGO,
   preview: DEFAULT_COMPANY_PREVIEW,
+  theme: DEFAULT_COMPANY_THEME,
+  cardAppearance: DEFAULT_CARD_APPEARANCE,
 };
 
 async function withSettingsLock<T>(operation: () => Promise<T>): Promise<T> {
@@ -66,6 +78,8 @@ export async function getCompanySettings(): Promise<CompanySettings> {
       website: typeof settings.website === "string" ? settings.website : defaults.website,
       logoData: typeof settings.logoData === "string" ? settings.logoData : defaults.logoData,
       preview: normalizeCompanyPreviewSettings(settings.preview) ?? defaults.preview,
+      theme: normalizeCompanyTheme(settings.theme),
+      cardAppearance: normalizeCardAppearance(settings.cardAppearance),
     };
   });
 }

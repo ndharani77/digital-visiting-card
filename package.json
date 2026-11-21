@@ -7,8 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:migrate": "node scripts/migrate-json-to-postgres.mjs",
-    "db:bootstrap-admin": "node scripts/bootstrap-super-admin.mjs"
+    "auth:bootstrap-admin": "node scripts/bootstrap-super-admin.mjs"
   },
   "dependencies": {
     "@next/env": "^15.5.6",

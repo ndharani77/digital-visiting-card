@@ -4,6 +4,7 @@ import { requireCompanyAdmin, requireUser } from "@/lib/auth";
 import { getCompanySettings, saveCompanySettings } from "@/lib/platform-store";
 import { validateCardField } from "@/lib/card-validation";
 import { isCompanyPreviewSettings } from "@/lib/company-content";
+import { isCardAppearance, isCompanyTheme } from "@/lib/company-theme";
 
 export const runtime = "nodejs";
 
@@ -45,11 +46,15 @@ export async function PUT(request: Request) {
     const website = typeof data.website === "string" ? data.website.trim() : data.website === undefined ? current.website : data.website;
     const logoData = typeof data.logoData === "string" ? data.logoData.trim() : data.logoData === undefined ? current.logoData : data.logoData;
     const preview = data.preview === undefined ? current.preview : data.preview;
+    const theme = data.theme === undefined ? current.theme : data.theme;
+    const cardAppearance = data.cardAppearance === undefined ? current.cardAppearance : data.cardAppearance;
     const errors = {
       companyName: typeof companyName === "string" ? validateCardField("company", companyName) : "Company name is required.",
       website: typeof website === "string" ? validateCardField("website", website) : "Website is required.",
       logoData: typeof logoData === "string" ? validateCardField("logoData", logoData) : "Choose a company logo.",
       preview: isCompanyPreviewSettings(preview) ? undefined : "Preview details are invalid.",
+      theme: isCompanyTheme(theme) ? undefined : "Choose a valid company theme.",
+      cardAppearance: isCardAppearance(cardAppearance) ? undefined : "Choose a valid card appearance.",
     };
     const invalidFields = Object.fromEntries(
       Object.entries(errors).filter(([, error]) => error !== undefined)
@@ -58,7 +63,8 @@ export async function PUT(request: Request) {
       return NextResponse.json({ message: Object.values(invalidFields)[0], errors: invalidFields }, { status: 400 });
     }
     if (typeof companyName !== "string" || typeof website !== "string" ||
-        typeof logoData !== "string" || !isCompanyPreviewSettings(preview)) {
+        typeof logoData !== "string" || !isCompanyPreviewSettings(preview) ||
+        !isCompanyTheme(theme) || !isCardAppearance(cardAppearance)) {
       return NextResponse.json({ message: "Invalid company settings." }, { status: 400 });
     }
     return NextResponse.json(await saveCompanySettings(user, {
@@ -66,6 +72,8 @@ export async function PUT(request: Request) {
       website,
       logoData,
       preview,
+      theme,
+      cardAppearance,
     }));
   } catch (error) {
     const authResponse = authFailureResponse(error);

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { authFailureResponse } from "@/lib/api-auth";
 import { requireUser } from "@/lib/auth";
 import { validateCardFields } from "@/lib/card-validation";
-import { BranchAssignmentError, getCompanySettings, getCardsForUser, createCardForUser } from "@/lib/platform-store";
+import {  getCompanySettings, getCardsForUser, createCardForUser } from "@/lib/platform-store";
 import { DEFAULT_CARD_ACCENT, DEFAULT_CARD_BACKGROUND } from "@/lib/card-defaults";
 
 export const runtime = "nodejs";
@@ -43,13 +43,13 @@ export async function POST(request: Request) {
     if ("companyId" in data) {
       return NextResponse.json({ message: "Company is determined by the active workspace." }, { status: 400 });
     }
-    if ("branchId" in data && data.branchId !== null && typeof data.branchId !== "string") {
-      return NextResponse.json({ message: "Choose a valid branch." }, { status: 400 });
+    if ("branchId" in data) {
+      return NextResponse.json({ message: "Branches are not supported." }, { status: 400 });
     }
     if (data.countryCode === undefined) data.countryCode = "+91";
     const settings = await getCompanySettings(user);
     data.company = settings.companyName;
-    data.logoData = settings.logoData;
+    if (!("logoData" in data)) data.logoData = settings.logoData;
     data.website = settings.website;
     const errors = validateCardFields(data);
     if (Object.keys(errors).length > 0) {
@@ -70,20 +70,16 @@ export async function POST(request: Request) {
       website: settings.website,
       linkedin: optionalText("linkedin"),
       linkedinName: optionalText("linkedinName"),
-      logoData: settings.logoData,
+      logoData: String(data.logoData),
       backgroundColor: DEFAULT_CARD_BACKGROUND,
       accentColor: DEFAULT_CARD_ACCENT,
-      branchId: typeof data.branchId === "string" && data.branchId ? data.branchId : null,
     });
     return NextResponse.json(card, { status: 201 });
   } catch (error) {
     const authResponse = authFailureResponse(error);
     if (authResponse) return authResponse;
-    if (error instanceof BranchAssignmentError) {
-      return NextResponse.json({ message: error.message }, { status: 400 });
-    }
     if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
-      return NextResponse.json({ message: "An employee with this email or employee code already exists in this company." }, { status: 409 });
+      return NextResponse.json({ message: "A card with this email already exists in this company." }, { status: 409 });
     }
     console.error("Unable to create visiting card:", error);
     return NextResponse.json({ message: error instanceof Error ? error.message : "Unable to create visiting card." }, { status: 500 });

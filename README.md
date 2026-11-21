@@ -8,13 +8,14 @@ The application supports multiple company workspaces. Company data, employee car
 
 ### Dashboard and card management
 
-- View the total number of cards, search cards by name, designation, company, branch, email, or phone number, and open recent cards.
+- View the total number of cards, search cards by name, designation, company, email, or phone number, and open recent cards.
 - Browse all saved cards in **My Cards**.
 - Create, edit, or delete cards. Deletion requires confirmation.
-- Super Admins manage company workspaces; Company Admins manage their company's cards and employee access; Employees can update and activate/deactivate only their own card.
-- Company Admins can create employee accounts with one-time temporary passwords. Employees must replace the temporary password when they first sign in.
-- Super Admins can switch the active company or view all companies. Company Admins and Employees are always restricted to their assigned company.
-- Company Admins and Super Admins can create and activate/deactivate branches within a company. Branches organize cards by location; they are not separate companies, and assigning a card to a branch is optional.
+- Super Admins manage company workspaces; Company Admins manage cards for their assigned company only.
+- Super Admins can create and edit Company Admin accounts, change their company, login email, or password, and activate, deactivate, or delete them. The last active administrator for a company cannot be deactivated, moved, or deleted.
+- Super Admins can view platform analytics and card statistics by company.
+- Super Admins can switch the active company or view all companies. Company Admins are always restricted to their assigned company.
+- Company Admins use **Preview Editing** to customize scan-page content and **Settings** to change their password or select a company brand-color palette for the dashboard and visiting cards.
 - Customize the scan-page About Us, Services, Enquiry form, and default WhatsApp message for each card, or use the shared company defaults.
 - Enter a contact's name, designation, country calling code, phone number, email, office address, and LinkedIn profile.
 - Form validation checks required fields, email and phone formats, country calling codes, and web links.
@@ -66,7 +67,7 @@ The application supports multiple company workspaces. Company data, employee car
 ## Run locally
 
 1. Copy `.env.example` to `.env.local`.
-2. Keep `STORAGE_DRIVER=json` and set `DEV_AUTH_BYPASS=true` for local work without a database or sign-in.
+2. Keep `STORAGE_DRIVER=json` and set `DEV_AUTH_BYPASS=true` for local work without sign-in.
 3. Install dependencies and start the development server:
 
    ```bash
@@ -76,13 +77,13 @@ The application supports multiple company workspaces. Company data, employee car
 
 4. Open [http://localhost:3000](http://localhost:3000). The app opens as a development Super Admin.
 
-On its first run, the JSON store imports the existing `data/cards.json` and `data/company-settings.json` into `data/platform.json`; the original files are left untouched. Restart `npm run dev` after changing environment settings. The bypass grants full access to the local data to anyone who can reach the development server. Keep the server on a trusted machine and never enable the bypass in production. JSON storage is intended for a single persistent development server; it is not safe for multiple app instances or concurrent multi-server writes. This does not connect SheetPilot.
+On its first run, the JSON store imports the existing `data/cards.json` and `data/company-settings.json` into `data/platform.json`; the original files are left untouched. Restart `npm run dev` after changing environment settings. The bypass grants full access to the local data to anyone who can reach the development server. Keep the server on a trusted machine and never enable the bypass in production. This does not connect SheetPilot.
 
 ## Production setup
 
-Production continues to use PostgreSQL. Configure `DATABASE_URL`, set `AUTH_SECRET` to a unique random value of at least 32 characters, and set `BOOTSTRAP_ADMIN_EMAIL` plus a unique `BOOTSTRAP_ADMIN_PASSWORD` of at least 14 characters. Then run `npm run db:migrate` to import the legacy JSON records and `npm run db:bootstrap-admin` to create the initial Super Admin. Do not enable `DEV_AUTH_BYPASS` in production.
+The application uses `data/platform.json` in every environment. Deploy it as a persistent Node.js application with writable storage, one active application writer, and backups for the `data/` directory. Do not use a read-only filesystem, serverless runtime, or multiple application instances with separate local disks; JSON file storage cannot safely coordinate writes between them.
 
-The database migration creates timestamped backups under `data/backups/`, preserves existing card UUIDs and QR URLs, and does not delete the JSON source files. Stop the old application before migrating. If the migration detects ambiguous duplicate employee records, it stops without importing data; review the backup and resolve the source records before retrying.
+Set `AUTH_SECRET` to a unique random value of at least 32 characters, set `BOOTSTRAP_ADMIN_EMAIL` and a unique `BOOTSTRAP_ADMIN_PASSWORD` of at least 14 characters, and keep `DEV_AUTH_BYPASS=false`. Do not use a sample or weak password such as `sa`, and never commit real passwords to source control. Start the app and make one sign-in request to initialize `data/platform.json` from any legacy JSON files; then stop the app and run `npm run auth:bootstrap-admin` before restarting it. Schema upgrades make a timestamped backup under `data/backups/` and leave legacy source files untouched. If an old record has no unambiguous company assignment, startup stops with an error instead of guessing or dropping it; correct the ownership in the backed-up JSON before retrying.
 
 ## Build and run for production
 
@@ -99,8 +100,8 @@ npm run lint
 
 ## Data storage and deployment
 
-In local development, companies, employees, users, and cards are stored in `data/platform.json`. In production, they are stored in PostgreSQL with company-scoped foreign keys. Per-card scan preview overrides are stored with the card; cards without overrides use the selected company's preview settings. Public QR pages expose only active card and company visitor-facing details. Management endpoints enforce role and company ownership on the server; login is required except when the local development bypass is explicitly enabled.
+Companies, accounts, cards, and activity logs are stored in `data/platform.json` in every environment. Per-card scan preview overrides are stored with the card; cards without overrides use the selected company's preview settings. QR codes are derived from card IDs and are not stored separately. Public QR pages expose only active card and company visitor-facing details. Management endpoints enforce role and company ownership on the server; login is required except when the local development bypass is explicitly enabled.
 
-The local JSON data file is git-ignored because it contains card and account data. Production deployments must provide a persistent PostgreSQL database, `DATABASE_URL`, and a private `AUTH_SECRET`. The Super Admin is provisioned from environment variables; Company Admins create employee accounts and must securely provide the one-time temporary password themselves because the application does not send email.
+The JSON data file is git-ignored because it contains card and account data. Back it up securely and never commit or expose it. The Super Admin is provisioned by `npm run auth:bootstrap-admin`. Company Admin passwords are hashed before they are stored; the Super Admin should communicate the chosen sign-in password securely. The application cannot retrieve a password after account creation.
 
 To open a card from another device, the device must be able to reach the server. `localhost` only refers to the current device; use a deployed public address or a LAN address reachable by the phone.

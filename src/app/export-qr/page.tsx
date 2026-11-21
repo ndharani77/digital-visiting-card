@@ -1,5 +1,3 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import BulkQRCodeExport from "@/components/BulkQRCodeExport";
 import Sidebar from "@/components/Sidebar";
 
@@ -9,9 +7,6 @@ export default function ExportQRCodesPage() {
       <Sidebar />
       <main className="min-w-0 flex-1 p-5 md:p-8 xl:p-10">
         <div className="mx-auto max-w-4xl">
-          <Link href="/" className="mb-5 inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-blue-600">
-            <ArrowLeft size={16} />Back to dashboard
-          </Link>
           <header className="mb-7">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700">Bulk management</p>
             <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Export QR codes</h1>

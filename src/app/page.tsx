@@ -8,16 +8,22 @@ import {
   CreditCard,
   Plus,
   QrCode,
-  Settings2,
   ShieldCheck,
+  Upload,
   UserRound,
-  Users,
   type LucideIcon,
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import DashboardCardSearch from "@/components/DashboardCardSearch";
+import CompanyNotifications from "@/components/CompanyNotifications";
+import SuperAdminDashboard from "@/components/SuperAdminDashboard";
 import { getActiveCompanyId, requirePageUser } from "@/lib/auth";
-import { getCardsForUser, listCompanies } from "@/lib/platform-store";
+import {
+  getActivityLogsForUser,
+  getCardsForUser,
+  getPlatformStatistics,
+  listCompanies,
+} from "@/lib/platform-store";
 import type { UserRole } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -45,70 +51,91 @@ const roleLabels: Record<UserRole, string> = {
 
 export default async function Dashboard() {
   const user = await requirePageUser("/");
+  const activeCompanyId = await getActiveCompanyId(user);
+  if (user.role === "SUPER_ADMIN" && !activeCompanyId) {
+    const [analytics, companies, activities] = await Promise.all([
+      getPlatformStatistics(user),
+      listCompanies(user),
+      getActivityLogsForUser(user),
+    ]);
+    return (
+      <SuperAdminDashboard
+        locale={user.locale}
+        companies={companies}
+        analytics={analytics}
+        activities={activities}
+      />
+    );
+  }
+
   const [cards, companies] = await Promise.all([
     getCardsForUser(user),
     listCompanies(user),
   ]);
-  const activeCompanyId = await getActiveCompanyId(user);
+  const analytics = user.role === "EMPLOYEE" ? null : await getPlatformStatistics(user);
   const company = user.role === "SUPER_ADMIN"
     ? companies.find((item) => item.id === activeCompanyId)
     : companies[0];
+  const companyScopeCompanies = user.role === "SUPER_ADMIN" && activeCompanyId
+    ? companies.filter((item) => item.id === activeCompanyId)
+    : companies;
   const activeCards = cards.filter((card) => card.isActive);
   const inactiveCards = cards.length - activeCards.length;
-  const cardHolderCount = new Set(cards.map((card) => card.employeeId).filter(Boolean)).size;
-  const isSuperAdmin = user.role === "SUPER_ADMIN";
-  const isCompanyAdmin = user.role === "COMPANY_ADMIN";
-  const title = isSuperAdmin
+  const isPlatformWideView = user.role === "SUPER_ADMIN" && !activeCompanyId;
+  const isCompanyAdmin = user.role === "COMPANY_ADMIN" ||
+    (user.role === "SUPER_ADMIN" && activeCompanyId !== null);
+  const dashboardRole: UserRole = isPlatformWideView ? "SUPER_ADMIN" : isCompanyAdmin ? "COMPANY_ADMIN" : user.role;
+  const title = isPlatformWideView
     ? "Platform overview"
     : isCompanyAdmin
       ? "Company dashboard"
       : "My card dashboard";
-  const headline = isSuperAdmin
+  const headline = isPlatformWideView
     ? "Your platform, at a glance."
     : isCompanyAdmin
       ? "Your team’s digital presence, organized."
       : "Your professional card, ready to share.";
-  const description = isSuperAdmin
+  const description = isPlatformWideView
     ? "Monitor company workspaces and keep card operations moving from one place."
     : isCompanyAdmin
       ? "Manage your team’s cards, review their status, and keep company details up to date."
       : "Keep your details current and share your digital card whenever you make a new connection.";
-  const eyebrow = isSuperAdmin
+  const eyebrow = isPlatformWideView
     ? "Platform management"
     : isCompanyAdmin
       ? "Company operations"
       : "Personal workspace";
-  const heroContext = isSuperAdmin
+  const heroContext = isPlatformWideView
     ? company?.name ?? "All companies"
     : company?.name ?? roleLabels[user.role];
 
-  const metrics: DashboardMetric[] = isSuperAdmin
+  const metrics: DashboardMetric[] = isPlatformWideView
     ? [
         {
           label: "Companies",
-          value: companies.length,
-          detail: "Workspaces on the platform",
+          value: companyScopeCompanies.length,
+          detail: company ? `Selected workspace: ${company.name}` : "Workspaces on the platform",
           icon: Building2,
           tone: "blue",
         },
         {
-          label: "Active companies",
-          value: companies.filter((item) => item.status === "active").length,
-          detail: "Ready to manage cards",
-          icon: CheckCircle2,
-          tone: "green",
-        },
-        {
-          label: company ? "Cards in selected company" : "Cards across companies",
-          value: cards.length,
-          detail: company ? company.name : "Select a company to focus your workspace",
+          label: "Visiting cards",
+          value: analytics?.cards ?? 0,
+          detail: "Across visible workspaces",
           icon: CreditCard,
           tone: "violet",
         },
         {
+          label: "Active QR codes",
+          value: analytics?.activeQrCodes ?? 0,
+          detail: "Available to visitors",
+          icon: QrCode,
+          tone: "blue",
+        },
+        {
           label: "Inactive cards",
-          value: inactiveCards,
-          detail: "Cards not currently available to visitors",
+          value: analytics?.inactiveCards ?? 0,
+          detail: "Not currently available to visitors",
           icon: CirclePause,
           tone: "amber",
         },
@@ -116,18 +143,18 @@ export default async function Dashboard() {
     : isCompanyAdmin
       ? [
           {
-            label: "Card holders",
-            value: cardHolderCount,
-            detail: "People represented in your workspace",
-            icon: Users,
-            tone: "blue",
-          },
-          {
             label: "Total cards",
             value: cards.length,
             detail: "Cards managed by your company",
             icon: CreditCard,
             tone: "violet",
+          },
+          {
+            label: "Active QR codes",
+            value: analytics?.activeQrCodes ?? 0,
+            detail: "Available to visitors",
+            icon: QrCode,
+            tone: "blue",
           },
           {
             label: "Active cards",
@@ -168,7 +195,7 @@ export default async function Dashboard() {
           },
         ];
 
-  const actions: DashboardAction[] = isSuperAdmin
+  const actions: DashboardAction[] = isPlatformWideView
     ? [
         { href: "/companies", label: "Manage companies", icon: Building2, primary: true },
         ...(company ? [{ href: "/create-card", label: "Create a card", icon: Plus }] : []),
@@ -177,17 +204,16 @@ export default async function Dashboard() {
     : isCompanyAdmin
       ? [
           { href: "/create-card", label: "Create team card", icon: Plus, primary: true },
-          { href: "/import-excel", label: "Import contacts", icon: Users },
-          ...(company ? [{ href: `/companies/${company.id}`, label: "Manage team", icon: Settings2 }] : []),
+          { href: "/import-excel", label: "Import contacts", icon: Upload },
         ]
       : cards[0]
         ? [
             { href: `/create-card?id=${encodeURIComponent(cards[0].id)}`, label: "Update my card", icon: UserRound, primary: true },
-            { href: `/card/${encodeURIComponent(cards[0].id)}/view`, label: "Preview and share", icon: ArrowUpRight },
+            { href: `/card/${encodeURIComponent(cards[0].id)}?source=qr`, label: "Preview and share", icon: ArrowUpRight },
           ]
         : [];
 
-  const cardScope = isSuperAdmin
+  const cardScope = isPlatformWideView
     ? company?.name ?? "All companies"
     : company?.name ?? "Your workspace";
 
@@ -204,10 +230,13 @@ export default async function Dashboard() {
                 {company ? `${company.name} workspace` : "All company workspaces"}
               </p>
             </div>
-            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-600 shadow-sm">
-              {isSuperAdmin ? <ShieldCheck size={15} /> : isCompanyAdmin ? <Building2 size={15} /> : <UserRound size={15} />}
-              {roleLabels[user.role]}
-            </span>
+            <div className="flex items-center gap-2">
+              {user.role !== "EMPLOYEE" && <CompanyNotifications locale={user.locale} showCompany={user.role === "SUPER_ADMIN"} />}
+              <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-600 shadow-sm">
+                {isPlatformWideView ? <ShieldCheck size={15} /> : isCompanyAdmin ? <Building2 size={15} /> : <UserRound size={15} />}
+                {roleLabels[dashboardRole]}
+              </span>
+            </div>
           </header>
 
           <section className="relative mb-7 overflow-hidden rounded-[26px] bg-gradient-to-br from-[#10233f] via-[#123c70] to-[#146ac0] p-7 text-white shadow-xl shadow-blue-950/10 md:p-9">
@@ -234,16 +263,16 @@ export default async function Dashboard() {
                       <Icon size={17} />{label}<ArrowRight size={15} />
                     </Link>
                   ))}
-                  {isSuperAdmin && !company && (
+                  {isPlatformWideView && !company && (
                     <p className="self-center text-sm text-blue-100">Select a company in the sidebar to manage its cards.</p>
                   )}
-                  {!isSuperAdmin && !isCompanyAdmin && cards.length === 0 && (
+                  {!isPlatformWideView && !isCompanyAdmin && cards.length === 0 && (
                     <p className="self-center text-sm text-blue-100">Your company administrator can create your card.</p>
                   )}
                 </div>
               </div>
               <div className="hidden h-36 w-36 shrink-0 items-center justify-center rounded-[28px] border border-white/20 bg-white/10 shadow-2xl backdrop-blur-sm lg:flex">
-                {isSuperAdmin
+                {isPlatformWideView
                   ? <ShieldCheck size={76} strokeWidth={1.2} />
                   : isCompanyAdmin
                     ? <Building2 size={76} strokeWidth={1.2} />
@@ -252,9 +281,9 @@ export default async function Dashboard() {
             </div>
           </section>
 
-          <section aria-label="Workspace summary" className={`mb-8 grid gap-3 sm:grid-cols-2 ${metrics.length === 3 ? "xl:grid-cols-3" : "xl:grid-cols-4"}`}>
+          <section aria-label="Workspace summary" className={`mb-8 grid gap-3 sm:grid-cols-2 ${metrics.length === 3 ? "xl:grid-cols-3" : metrics.length === 5 ? "xl:grid-cols-5" : "xl:grid-cols-4"}`}>
             {metrics.map(({ label, value, detail, icon: Icon, tone }) => (
-              <article key={label} className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-900/[0.02]">
+              <article key={label} className="dashboard-stat-card rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-900/[0.02]">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-slate-500">{label}</p>
@@ -276,7 +305,7 @@ export default async function Dashboard() {
 
           <DashboardCardSearch
             cards={cards}
-            role={user.role}
+            role={dashboardRole}
             canCreateCard={user.role !== "EMPLOYEE" && (user.role !== "SUPER_ADMIN" || activeCompanyId !== null)}
             scopeLabel={cardScope}
             hasCompanySelected={user.role !== "SUPER_ADMIN" || activeCompanyId !== null}

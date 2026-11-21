@@ -127,14 +127,15 @@ try {
         INSERT INTO cards (
           id, company_id, employee_id, full_name, designation, country_code,
           mobile, email, address, website, linkedin, linkedin_name, is_active,
-          preview, created_at
+          logo_data, preview, created_at
         ) VALUES (
           ${card.id}, ${companyId}, ${card.employeeId}, ${String(card.fullName ?? "").trim()},
           ${String(card.designation ?? "").trim()}, ${String(card.countryCode ?? "+91")},
           ${String(card.mobile ?? "").trim()}, ${normalizeEmail(card.email)},
           ${String(card.address ?? "")}, ${String(card.website ?? settings.website ?? "")},
           ${String(card.linkedin ?? "")}, ${String(card.linkedinName ?? "")},
-          ${card.isActive !== false}, ${card.preview ? JSON.stringify(card.preview) : null}::jsonb,
+          ${card.isActive !== false}, ${String(card.logoData ?? settings.logoData ?? "")},
+          ${card.preview ? JSON.stringify(card.preview) : null}::jsonb,
           ${card.createdAt ? new Date(card.createdAt) : new Date()}
         )
       `;
