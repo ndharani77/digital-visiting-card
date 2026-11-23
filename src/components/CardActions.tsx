@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Ellipsis, Pencil, Power, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Ellipsis, Pencil, Power, Trash2 } from "lucide-react";
 import type { UserRole } from "@/lib/types";
 
 export default function CardActions({
@@ -97,14 +97,6 @@ export default function CardActions({
           >
             <Pencil size={16} /> Edit card
           </Link>
-          <Link
-            role="menuitem"
-            href={`/company/preview-details?cardId=${encodeURIComponent(cardId)}`}
-            onClick={() => setOpen(false)}
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-          >
-            <SlidersHorizontal size={16} /> Edit preview
-          </Link>
           <button
             type="button"
             role="menuitem"
@@ -112,7 +104,7 @@ export default function CardActions({
             onClick={() => { void toggleActive(); }}
             className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60"
           >
-            <Power size={16} /> {updatingStatus ? "Updating..." : isActive ? "Deactivate card" : "Activate card"}
+            <Power size={16} /> {updatingStatus ? "Updating..." : isActive ? "Inactive" : "Activate card"}
           </button>
           {role !== "EMPLOYEE" && (
             <button

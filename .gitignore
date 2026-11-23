@@ -5,8 +5,4 @@ out
 .env*
 !.env.example
 *.log
-data/cards.json
-data/company-settings.json
-data/platform.json
-data/platform.json.*.tmp
 data/backups/

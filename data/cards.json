@@ -1,0 +1,393 @@
+[
+  {
+    "fullName": "D PRIYANKA",
+    "designation": "Assistant Manager",
+    "company": "Brihaspathi Technologies",
+    "countryCode": "+91",
+    "mobile": "9247994408",
+    "email": "priyanka@brihaspathi.com",
+    "address": "Brihaspathi Technologies Limited\n#501, #508-510, Shangrila Plaza, Road No. 2, Park View Enclave, Banjara Hills, Hyderabad - 34 Toll Free - 18002968899",
+    "website": "https://www.brihaspathi.com/",
+    "linkedin": "",
+    "linkedinName": "",
+    "logoData": "/brihaspathi-logo.png",
+    "backgroundColor": "#dbeafe",
+    "accentColor": "#07518a",
+    "id": "97c6ddd8-93cc-48c3-932c-39cca9acb55b",
+    "createdAt": "2026-11-18T05:37:11.773Z",
+    "active": true,
+    "isActive": false,
+    "preview": {
+      "whatsappMessage": "Hi {name},\n\nI came across your digital visiting card and would like to connect with you. Looking forward to speaking with you.",
+      "labels": {
+        "call": "Call",
+        "addContact": "Contact",
+        "whatsapp": "WhatsApp",
+        "email": "Email",
+        "share": "Share",
+        "previous": "Previous",
+        "next": "Next",
+        "footer": "Digital contact card · Powered by Card Reader"
+      },
+      "tabs": {
+        "about": "About Us",
+        "services": "Services",
+        "enquiry": "Enquiry"
+      },
+      "about": {
+        "kicker": "Company profile",
+        "title": "Brihaspathi Technologies",
+        "description": "An AI-powered mission-critical technology company with capabilities spanning proprietary product engineering, electronics manufacturing, software platforms, AI video intelligence and nationwide project execution.",
+        "visionTitle": "Our vision",
+        "vision": "To become one of the India’s leading AI-powered mission-critical technology companies with global relevance.",
+        "missionTitle": "Our mission",
+        "mission": "To build an AI-powered mission-critical technology enterprise combining the proprietary hardware, software, AI platforms, electronics manufacturing and managed services for Defence, Public Safety, Railways, Mobility and Critical Infrastructure.",
+        "metrics": [
+          {
+            "id": "metric-years",
+            "value": "15+",
+            "label": "Years of excellence"
+          },
+          {
+            "id": "metric-cameras",
+            "value": "2M+",
+            "label": "Cameras deployed"
+          },
+          {
+            "id": "metric-clients",
+            "value": "15k+",
+            "label": "Clients"
+          },
+          {
+            "id": "metric-professionals",
+            "value": "400+",
+            "label": "Professionals"
+          }
+        ],
+        "sections": []
+      },
+      "services": {
+        "title": "Our services",
+        "moreLabel": "More",
+        "moreLink": "https://brihaspathi.com/",
+        "items": []
+      },
+      "enquiry": {
+        "title": "Enquiry Form",
+        "description": "",
+        "submitLabel": "Send",
+        "fields": [
+          {
+            "id": "name",
+            "label": "Name",
+            "placeholder": "Name",
+            "type": "text",
+            "required": true
+          },
+          {
+            "id": "email",
+            "label": "Email",
+            "placeholder": "Email",
+            "type": "email",
+            "required": true
+          },
+          {
+            "id": "phone",
+            "label": "Mobile",
+            "placeholder": "Mobile",
+            "type": "tel",
+            "required": false
+          },
+          {
+            "id": "message",
+            "label": "Message",
+            "placeholder": "Type your message",
+            "type": "textarea",
+            "required": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "fullName": "ANIL RAVINUTALA",
+    "designation": "VP - Procurement & Supply Chain",
+    "company": "Brihaspathi Technologies",
+    "countryCode": "+91",
+    "mobile": "7386673332",
+    "email": "anil.r@brihaspathi.com",
+    "address": "Brihaspathi Technologies Limited #501, #508-510, Shangrila Plaza, Road No. 2, Park View Enclave, Banjara Hills, Hyderabad - 34 \nToll Free - 18002968899",
+    "website": "https://www.brihaspathi.com/",
+    "linkedin": "",
+    "linkedinName": "",
+    "logoData": "/brihaspathi-logo.png",
+    "backgroundColor": "#dbeafe",
+    "accentColor": "#07518a",
+    "id": "f2a7b3e2-3a21-4e0c-92c7-b97bb31f26fc",
+    "createdAt": "2026-11-10T11:51:21.684Z",
+    "active": true,
+    "isActive": true,
+    "preview": {
+      "whatsappMessage": "Hi {name},\n\nI came across your digital visiting card and would like to connect with you. Looking forward to speaking with you.",
+      "labels": {
+        "call": "Call",
+        "addContact": "Contact",
+        "whatsapp": "WhatsApp",
+        "email": "Email",
+        "share": "Share",
+        "previous": "Previous",
+        "next": "Next",
+        "footer": "Digital contact card · Powered by Card Reader"
+      },
+      "tabs": {
+        "about": "About Us",
+        "services": "Services",
+        "enquiry": "Enquiry"
+      },
+      "about": {
+        "kicker": "Company profile",
+        "title": "Brihaspathi Technologies",
+        "description": "An AI-powered mission-critical technology company with capabilities spanning proprietary product engineering, electronics manufacturing, software platforms, AI video intelligence and nationwide project execution.",
+        "visionTitle": "Our vision",
+        "vision": "To become one of the India’s leading AI-powered mission-critical technology companies with global relevance.",
+        "missionTitle": "Our mission",
+        "mission": "To build an AI-powered mission-critical technology enterprise combining the proprietary hardware, software, AI platforms, electronics manufacturing and managed services for Defence, Public Safety, Railways, Mobility and Critical Infrastructure.",
+        "metrics": [
+          {
+            "id": "metric-years",
+            "value": "15+",
+            "label": "Years of excellence"
+          },
+          {
+            "id": "metric-cameras",
+            "value": "2M+",
+            "label": "Cameras deployed"
+          },
+          {
+            "id": "metric-clients",
+            "value": "15k+",
+            "label": "Clients"
+          },
+          {
+            "id": "metric-professionals",
+            "value": "400+",
+            "label": "Professionals"
+          }
+        ],
+        "sections": []
+      },
+      "services": {
+        "title": "Our services",
+        "moreLabel": "More",
+        "moreLink": "https://brihaspathi.com/",
+        "items": []
+      },
+      "enquiry": {
+        "title": "Enquiry Form",
+        "description": "",
+        "submitLabel": "Send",
+        "fields": [
+          {
+            "id": "name",
+            "label": "Name",
+            "placeholder": "Name",
+            "type": "text",
+            "required": true
+          },
+          {
+            "id": "email",
+            "label": "Email",
+            "placeholder": "Email",
+            "type": "email",
+            "required": true
+          },
+          {
+            "id": "phone",
+            "label": "Mobile",
+            "placeholder": "Mobile",
+            "type": "tel",
+            "required": false
+          },
+          {
+            "id": "message",
+            "label": "Message",
+            "placeholder": "Type your message",
+            "type": "textarea",
+            "required": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "fullName": "AYYANNA BANDARU",
+    "designation": "Investor Relations & Compliance",
+    "company": "Brihaspathi Technologies",
+    "countryCode": "+91",
+    "mobile": "9247558122",
+    "email": "ayyan@brihaspathi.com",
+    "address": "Brihaspathi Technologies Limited #501, #508-510, Shangrila Plaza, Road No. 2, Park View Enclave, Banjara Hills, Hyderabad - 34 \nToll Free - 1800 296 8899",
+    "website": "https://www.brihaspathi.com/",
+    "linkedin": "",
+    "logoData": "/brihaspathi-logo.png",
+    "backgroundColor": "#dbeafe",
+    "accentColor": "#07518a",
+    "id": "46a3242f-09c1-4bcf-96c7-dd476de61a4a",
+    "createdAt": "2026-11-02T11:28:17.926Z",
+    "active": true,
+    "isActive": true
+  },
+  {
+    "fullName": "Dharani Nallamari",
+    "designation": "Software Intern",
+    "company": "Brihaspathi Technologies",
+    "countryCode": "+91",
+    "mobile": "9108907825",
+    "email": "ndharani0711@gmail.com",
+    "address": "Shangrilla Plaza, Banjara Hills, Hyderabad, Telangana -500081",
+    "website": "https://www.brihaspathi.com/",
+    "linkedin": "https://www.linkedin.com/in/nallamari-dharani-066988293/",
+    "linkedinName": "Nallamari Dharani",
+    "logoData": "/brihaspathi-logo.png",
+    "backgroundColor": "#dbeafe",
+    "accentColor": "#07518a",
+    "id": "8f8be7b5-35ca-4341-b195-1e5f7a608fdd",
+    "createdAt": "2026-10-31T11:28:07.073Z",
+    "active": true,
+    "isActive": true,
+    "preview": {
+      "whatsappMessage": "Hi {name},\n",
+      "labels": {
+        "call": "Call",
+        "addContact": "Contact",
+        "whatsapp": "WhatsApp",
+        "email": "Email",
+        "share": "Share",
+        "previous": "Previous",
+        "next": "Next",
+        "footer": "Digital contact card · Powered by Card Reader"
+      },
+      "tabs": {
+        "about": "About Us",
+        "services": "Services",
+        "enquiry": "Enquiry"
+      },
+      "about": {
+        "kicker": "Company profile",
+        "title": "Brihaspathi Technologies",
+        "description": "An AI-powered mission-critical technology company with capabilities spanning proprietary product engineering, electronics manufacturing, software platforms, AI video intelligence and nationwide project execution.",
+        "visionTitle": "Our vision",
+        "vision": "To become one of the India’s leading AI-powered mission-critical technology companies with global relevance.",
+        "missionTitle": "Our mission",
+        "mission": "To build an AI-powered mission-critical technology enterprise combining the proprietary hardware, software, AI platforms, electronics manufacturing and managed services for Defence, Public Safety, Railways, Mobility and Critical Infrastructure.",
+        "metrics": [
+          {
+            "id": "metric-years",
+            "value": "15+",
+            "label": "Years of excellence"
+          },
+          {
+            "id": "metric-cameras",
+            "value": "2M+",
+            "label": "Cameras deployed"
+          },
+          {
+            "id": "metric-clients",
+            "value": "15k+",
+            "label": "Clients"
+          },
+          {
+            "id": "metric-professionals",
+            "value": "400+",
+            "label": "Professionals"
+          }
+        ],
+        "sections": []
+      },
+      "services": {
+        "title": "Our services",
+        "moreLabel": "More",
+        "moreLink": "https://brihaspathi.com/",
+        "items": [
+          {
+            "id": "service-smart-bus",
+            "title": "Smart Bus Solutions",
+            "href": "https://brihaspathi.com/services/smart-bus-solutions",
+            "description": "Our smart bus systems combine AI CCTV, GPS tracking, Wi-Fi, displays, breath analysis, and analytics for public transport. Real-time monitoring supports passenger safety and fleet oversight, while route insights help operators improve service efficiency. Optional features include pedestrian blind-spot detection and driver fatigue monitoring.",
+            "image": "/services/smart-bus-solutions.jpeg"
+          },
+          {
+            "id": "service-solar",
+            "title": "Sustainable Energy Revolution: Solar EPC Excellence",
+            "href": "https://brihaspathi.com/solutions/solar-epc",
+            "description": "Our Solar EPC service delivers turnkey solar power projects for residential, commercial, and industrial clients. We manage site assessments, engineering and system design, procurement of quality components, construction, grid integration, testing, and commissioning. Quality checks and project management help ensure reliable performance, streamlined delivery, and lasting renewable energy benefits.",
+            "image": "/services/solar-epc.jpg"
+          },
+          {
+            "id": "service-software",
+            "title": "Software Products & Services",
+            "href": "https://brihaspathi.com/services/software-products-services",
+            "description": "We develop software for communication, automation, and business management, including web and app development, IoT applications, E-Communication, and ERP systems. Solutions such as Biz Track ERP help streamline operations, support customer engagement, and provide insights for growing businesses.",
+            "image": "/services/software-products-services.jpeg"
+          },
+          {
+            "id": "service-hrms",
+            "title": "HRMS",
+            "href": "https://brihaspathi.com/product/hrms",
+            "description": "Brihaspathi's HRMS centralizes employee records and supports recruitment, onboarding, attendance, leave, payroll, performance, and document management. Workflow automation, biometric integration, notifications, dashboards, and employee self-service help HR teams streamline everyday processes and maintain visibility across the employee lifecycle.",
+            "image": "/services/hrms.jpg"
+          },
+          {
+            "id": "service-visitor-management",
+            "title": "AI Visitor Management System",
+            "href": "https://brihaspathi.com/product/ai-visitor-management-system",
+            "description": "Improve facility security with AI facial recognition, visitor identification, and multi-camera tracking. The system supports digital registration, QR visitor passes, and approval workflows, while a centralized dashboard helps security teams monitor visitor activity, movement, alerts, and events across the premises.",
+            "image": "/services/ai-visitor-management.png"
+          },
+          {
+            "id": "service-command-centre",
+            "title": "Command & Control Centre Engineering",
+            "href": "https://brihaspathi.com/services/command-control-centre-engineering",
+            "description": "We design and build Integrated Command & Control Centres (ICCCs) with video walls, operator consoles, monitoring platforms, and backend infrastructure. These integrated environments give teams real-time visibility to coordinate operations, monitor incidents, and make informed decisions across connected systems.",
+            "image": "/services/command-control.jpeg"
+          }
+        ]
+      },
+      "enquiry": {
+        "title": "Enquiry Form",
+        "description": "",
+        "submitLabel": "Send",
+        "fields": [
+          {
+            "id": "name",
+            "label": "Name",
+            "placeholder": "Name",
+            "type": "text",
+            "required": true
+          },
+          {
+            "id": "email",
+            "label": "Email",
+            "placeholder": "Email",
+            "type": "email",
+            "required": true
+          },
+          {
+            "id": "phone",
+            "label": "Mobile",
+            "placeholder": "Mobile",
+            "type": "tel",
+            "required": false
+          },
+          {
+            "id": "message",
+            "label": "Message",
+            "placeholder": "Type your message",
+            "type": "textarea",
+            "required": true
+          }
+        ]
+      }
+    }
+  }
+]
