@@ -8,6 +8,7 @@ import QRCodeDownloads from "@/components/QRCodeDownloads";
 import CompanyProfile from "@/components/CompanyProfile";
 import CardPreviewPdfDownload from "@/components/CardPreviewPdfDownload";
 import type { VisitingCard } from "@/lib/types";
+import { getCardQrPath } from "@/lib/card-slug";
 import { createVCard } from "@/lib/vcard";
 import {
   isCompanyPreviewSettings,
@@ -153,7 +154,6 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
   const [companyTheme, setCompanyTheme] = useState<CompanyTheme>(DEFAULT_COMPANY_THEME);
   const [canEditCardPreview, setCanEditCardPreview] = useState(false);
   const [isCardPreviewCustom, setIsCardPreviewCustom] = useState(false);
-  const [defaultServiceIds, setDefaultServiceIds] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [id, setId] = useState("");
   const [qrUrl, setQrUrl] = useState("");
@@ -169,7 +169,6 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
   useEffect(() => {
     params.then(({ id: cardId }) => {
       setId(cardId);
-      setQrUrl(`${window.location.origin}/card/${cardId}?source=qr`);
       setIsQrVisit(new URLSearchParams(window.location.search).get("source") === "qr");
     });
   }, [params]);
@@ -209,6 +208,10 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
         }
         setCompanyTheme(normalizeCompanyTheme(company.theme));
         setCard(loadedCard);
+        setQrUrl(`${window.location.origin}${getCardQrPath(loadedCard)}`);
+        if (qrVisit && window.location.pathname + window.location.search !== getCardQrPath(loadedCard)) {
+          window.history.replaceState(window.history.state, "", getCardQrPath(loadedCard));
+        }
         if (!qrVisit) return;
         setCompanyPreview(mergeCardPreviewWithCompanyDefaults(company.preview, loadedCard.preview));
         setCompanyBranding({ companyName: company.companyName, logoData: company.logoData });
@@ -220,11 +223,12 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
   }, [id]);
 
   useEffect(() => {
-    if (!id || isQrVisit !== true) return;
+    const previewCardId = card?.id ?? "";
+    if (!previewCardId || isQrVisit !== true) return;
     let cancelled = false;
     async function checkCardPreviewAccess() {
       try {
-        const response = await fetch(`/api/cards/${encodeURIComponent(id)}/preview`);
+        const response = await fetch(`/api/cards/${encodeURIComponent(previewCardId)}/preview`);
         if (response.status === 401 || response.status === 403 || response.status === 404) return;
         const result: unknown = await response.json();
         if (!response.ok) {
@@ -235,16 +239,13 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
         }
         if (!result || typeof result !== "object" || !("preview" in result) ||
             !isCompanyPreviewSettings(result.preview) ||
-            !("isCustom" in result) || typeof result.isCustom !== "boolean" ||
-            !("defaultServiceIds" in result) || !Array.isArray(result.defaultServiceIds) ||
-            !result.defaultServiceIds.every((serviceId) => typeof serviceId === "string")) {
+            !("isCustom" in result) || typeof result.isCustom !== "boolean") {
           throw new Error("Card preview access response is invalid.");
         }
         if (!cancelled) {
           setCanEditCardPreview(true);
           setCompanyPreview(result.preview);
           setIsCardPreviewCustom(result.isCustom);
-          setDefaultServiceIds(result.defaultServiceIds);
         }
       } catch (accessError) {
         if (!cancelled) console.error("Unable to verify card preview editing access.", accessError);
@@ -252,7 +253,7 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
     }
     void checkCardPreviewAccess();
     return () => { cancelled = true; };
-  }, [id, isQrVisit]);
+  }, [card?.id, isQrVisit]);
 
   useEffect(() => {
     if (isQrVisit !== true) return;
@@ -317,7 +318,7 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
     const contactFile = new File([createVCard(card)], fileName, { type: "text/vcard" });
     if (!navigator.canShare?.({ files: [contactFile] })) {
       setContactMessage("Opening the contact file. Choose Contacts, then tap Save or Done to finish.");
-      window.location.assign(`/api/public/cards/${encodeURIComponent(id)}/vcf`);
+      window.location.assign(`/api/public/cards/${encodeURIComponent(card.id)}/vcf`);
       return;
     }
 
@@ -460,10 +461,9 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
             recipientEmail={card.email}
             preview={companyPreview}
             isActive={card.isActive}
-            cardId={id}
+            cardId={card.id}
             canEditPreview={canEditCardPreview}
             isCustomPreview={isCardPreviewCustom}
-            defaultServiceIds={defaultServiceIds}
             onPreviewSaved={(updatedPreview, isCustom) => {
               setCompanyPreview(updatedPreview);
               setIsCardPreviewCustom(isCustom);

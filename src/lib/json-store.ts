@@ -17,12 +17,14 @@ import {
   normalizeCompanyTheme,
 } from "@/lib/company-theme";
 import { normalizeUserPreferences, type UserPreferences } from "@/lib/user-preferences";
+import { createUniqueCardSlug } from "@/lib/card-slug";
 import type { CompanyRecord } from "@/lib/platform-store";
 import type { UserRole, VisitingCard } from "@/lib/types";
 
 export type JsonEmployee = {
   id: string;
   companyId: string;
+  branchId?: string;
   fullName: string;
   designation: string;
   countryCode: string;
@@ -40,6 +42,7 @@ export type JsonUser = {
   passwordHash: string;
   role: UserRole;
   companyId: string | null;
+  branchId?: string;
   employeeId: string | null;
   status: "active" | "inactive";
   mustChangePassword: boolean;
@@ -52,11 +55,19 @@ export type JsonBranch = {
   companyId: string;
   name: string;
   code: string;
+  email: string;
+  phone: string;
+  website: string;
+  logoData: string;
   address: string;
   city: string;
   state: string;
   country: string;
+  description: string;
   status: "active" | "inactive";
+  preview: CompanyRecord["preview"];
+  theme: CompanyRecord["theme"];
+  cardAppearance: CompanyRecord["cardAppearance"];
   createdAt: string;
   updatedAt: string;
 };
@@ -154,12 +165,13 @@ async function createInitialState(): Promise<JsonPlatformState> {
     phone: "",
     website: typeof settings.website === "string" ? settings.website : DEFAULT_WEBSITE,
     logoData: typeof settings.logoData === "string" ? settings.logoData : DEFAULT_COMPANY_LOGO,
-    address: "",
+    address: typeof settings.address === "string" ? settings.address : "",
     city: "",
     state: "",
     country: "",
     description: "",
     status: "active",
+    branchEnabled: false,
     preview: normalizeCompanyPreviewSettings(settings.preview) ?? createDefaultCompanyPreview(companyName),
     theme: DEFAULT_COMPANY_THEME,
     cardAppearance: DEFAULT_CARD_APPEARANCE,
@@ -351,6 +363,12 @@ function migrateCompanyOwnership(state: JsonPlatformState): boolean {
     if (user.role === "COMPANY_ADMIN" && user.employeeId) {
       throw new Error(`Company Admin account "${user.id}" cannot be linked to an employee.`);
     }
+    if (user.branchId && (
+      user.role !== "COMPANY_ADMIN" ||
+      !state.branches.some((branch) => branch.id === user.branchId && branch.companyId === user.companyId)
+    )) {
+      throw new Error(`Branch Admin account "${user.id}" has no matching branch. Resolve it in data/platform.json and restart.`);
+    }
     const matchingCompanyIds = new Set<string>();
     if (linked) {
       matchingCompanyIds.add(linked);
@@ -401,8 +419,55 @@ async function loadState(): Promise<JsonPlatformState> {
     cards: source.cards as VisitingCard[],
     activityLogs: Array.isArray(source.activityLogs) ? source.activityLogs as JsonActivityLog[] : [],
   };
+  let normalizationChanged = false;
+  const usedCardSlugs = new Set<string>();
+  for (const card of migrated.cards) {
+    const company = migrated.companies.find((item) => item.id === card.companyId);
+    const branch = migrated.branches.find((item) => item.id === card.branchId && item.companyId === card.companyId);
+    const existingSlug = typeof card.publicSlug === "string" ? card.publicSlug : "";
+    if (existingSlug && !usedCardSlugs.has(existingSlug)) {
+      usedCardSlugs.add(existingSlug);
+      continue;
+    }
+    card.publicSlug = createUniqueCardSlug(
+      card.fullName,
+      branch?.name ?? company?.name ?? card.company,
+      usedCardSlugs
+    );
+    usedCardSlugs.add(card.publicSlug);
+    normalizationChanged = true;
+  }
+  for (const company of migrated.companies) {
+    if (typeof company.branchEnabled !== "boolean") {
+      company.branchEnabled = false;
+      normalizationChanged = true;
+    }
+  }
+  for (const branch of migrated.branches) {
+    const company = migrated.companies.find((item) => item.id === branch.companyId);
+    const normalizeText = (value: unknown) => typeof value === "string" ? value : "";
+    const defaults = {
+      email: normalizeText(branch.email),
+      phone: normalizeText(branch.phone),
+      website: normalizeText(branch.website),
+      logoData: normalizeText(branch.logoData),
+      description: normalizeText(branch.description),
+      code: normalizeText(branch.code),
+      preview: branch.preview ?? company?.preview ?? createDefaultCompanyPreview(branch.name),
+      theme: branch.theme ?? company?.theme ?? DEFAULT_COMPANY_THEME,
+      cardAppearance: branch.cardAppearance ?? company?.cardAppearance ?? DEFAULT_CARD_APPEARANCE,
+    };
+    if (JSON.stringify({
+      email: branch.email, phone: branch.phone, website: branch.website,
+      logoData: branch.logoData, description: branch.description, code: branch.code,
+      preview: branch.preview, theme: branch.theme, cardAppearance: branch.cardAppearance,
+    }) !== JSON.stringify(defaults)) {
+      Object.assign(branch, defaults);
+      normalizationChanged = true;
+    }
+  }
   const ownershipChanged = migrateCompanyOwnership(migrated);
-  if (source.version !== 3 || ownershipChanged || !Array.isArray(source.activityLogs)) {
+  if (source.version !== 3 || normalizationChanged || ownershipChanged || !Array.isArray(source.activityLogs)) {
     const backupDirectory = path.join(dataDirectory, "backups");
     const backupFile = path.join(
       backupDirectory,

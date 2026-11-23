@@ -1,5 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { createCardSlug, createUniqueCardSlug } from "@/lib/card-slug";
 import { createDefaultCompanyPreview, type CompanyPreviewSettings } from "@/lib/company-content";
 import { DEFAULT_CARD_ACCENT, DEFAULT_CARD_BACKGROUND } from "@/lib/card-defaults";
 import {
@@ -18,6 +19,7 @@ import {
   canViewCompany,
   CompanySelectionRequiredError,
   getActiveCompanyId,
+  isBranchAdmin,
   requireCompanyAdmin,
   AuthorizationError,
   type AuthUser,
@@ -71,6 +73,7 @@ export type CompanyRecord = {
   country: string;
   description: string;
   status: "active" | "inactive";
+  branchEnabled: boolean;
   preview: CompanyPreviewSettings;
   theme: CompanyTheme;
   cardAppearance: CardAppearance;
@@ -79,26 +82,48 @@ export type CompanyRecord = {
 export type CompanyInput = Pick<
   CompanyRecord,
   "name" | "email" | "phone" | "website" | "address" | "city" | "state" | "country" | "description" | "status"
-> & { logoData?: string; preview?: CompanyPreviewSettings; theme?: CompanyTheme; cardAppearance?: CardAppearance };
+> & { logoData?: string; branchEnabled?: boolean; preview?: CompanyPreviewSettings; theme?: CompanyTheme; cardAppearance?: CardAppearance };
 
 export type BranchRecord = {
   id: string;
   companyId: string;
   name: string;
   code: string;
+  email: string;
+  phone: string;
+  website: string;
+  logoData: string;
   address: string;
   city: string;
   state: string;
   country: string;
+  description: string;
   status: "active" | "inactive";
+  preview: CompanyPreviewSettings;
+  theme: CompanyTheme;
+  cardAppearance: CardAppearance;
 };
 
-export type BranchInput = Pick<BranchRecord, "name" | "code" | "address" | "city" | "state" | "country">;
+export type BranchInput = Pick<
+  BranchRecord,
+  "name" | "code" | "email" | "phone" | "website" | "logoData" | "address" | "city" | "state" | "country" | "description" | "status"
+> & { preview?: CompanyPreviewSettings; theme?: CompanyTheme; cardAppearance?: CardAppearance };
+
+export type BranchStatistics = {
+  branchId: string;
+  branchName: string;
+  branchStatus: "active" | "inactive";
+  employees: number;
+  cards: number;
+  activeCards: number;
+};
 
 export type EmployeeOverview = {
   id: string;
   companyId: string;
   companyName: string;
+  branchId: string | null;
+  branchName: string;
   fullName: string;
   email: string;
   designation: string;
@@ -110,6 +135,9 @@ export type CompanyStatistics = {
   companyId: string;
   companyName: string;
   companyStatus: "active" | "inactive";
+  branches: number;
+  branchCards: number;
+  branchDetails: BranchStatistics[];
   employees: number;
   cards: number;
   activeCards: number;
@@ -120,6 +148,8 @@ export type CompanyStatistics = {
 export type PlatformStatistics = {
   companies: number;
   activeCompanies: number;
+  branches: number;
+  branchCards: number;
   employees: number;
   cards: number;
   activeCards: number;
@@ -168,6 +198,7 @@ export function recordActivity(
 function toVisitingCard(row: CardRow): VisitingCard {
   return {
     id: row.id,
+    publicSlug: createCardSlug(row.full_name, row.branch_name ?? row.company_name),
     companyId: row.company_id,
     employeeId: row.employee_id,
     branchId: row.branch_id ?? undefined,
@@ -232,13 +263,27 @@ function getLocalCard(card: VisitingCard, state: Awaited<ReturnType<typeof readJ
   const branch = state.branches.find((item) => item.id === card.branchId && item.companyId === card.companyId);
   return {
     ...card,
-    backgroundColor: CARD_APPEARANCE_BACKGROUNDS[normalizeCardAppearance(company.cardAppearance)],
+    backgroundColor: CARD_APPEARANCE_BACKGROUNDS[normalizeCardAppearance(branch?.cardAppearance ?? company.cardAppearance)],
     accentColor: card.accentColor ?? DEFAULT_CARD_ACCENT,
     branchName: branch?.name,
-    company: company.name,
-    website: company.website,
-    logoData: card.logoData || company.logoData,
+    company: branch?.name ?? company.name,
+    website: branch?.website || company.website,
+    logoData: card.logoData || branch?.logoData || company.logoData,
+    preview: card.preview ?? (branch?.preview as VisitingCard["preview"]) ?? company.preview,
   };
+}
+
+function refreshCardPublicSlug(
+  state: JsonPlatformState,
+  card: VisitingCard,
+  fullName = card.fullName,
+  companyName = card.company
+): void {
+  const usedSlugs = state.cards
+    .filter((item) => item.id !== card.id)
+    .map((item) => item.publicSlug)
+    .filter((slug): slug is string => Boolean(slug));
+  card.publicSlug = createUniqueCardSlug(fullName, companyName, usedSlugs);
 }
 
 function toCompany(row: Record<string, unknown>): CompanyRecord {
@@ -255,6 +300,7 @@ function toCompany(row: Record<string, unknown>): CompanyRecord {
     country: String(row.country ?? ""),
     description: String(row.description ?? ""),
     status: row.status === "inactive" ? "inactive" : "active",
+    branchEnabled: row.branch_enabled === true,
     preview: (row.preview ?? {}) as CompanyPreviewSettings,
     theme: normalizeCompanyTheme(row.theme),
     cardAppearance: normalizeCardAppearance(row.card_appearance),
@@ -312,21 +358,26 @@ export async function listEmployeesForUser(user: AuthUser): Promise<EmployeeOver
   );
   const visibleCompanyIds = new Set(visibleCompanies.map((company) => company.id));
   const companyNames = new Map(visibleCompanies.map((company) => [company.id, company.name]));
+  const branchNames = new Map(state.branches.map((branch) => [branch.id, branch.name]));
   const cardsByEmployee = new Map<string, string>();
   for (const card of state.cards) {
-    if (card.employeeId && visibleCompanyIds.has(card.companyId ?? "")) {
+    if (card.employeeId && visibleCompanyIds.has(card.companyId ?? "") &&
+        (!isBranchAdmin(user) || card.branchId === user.branchId)) {
       cardsByEmployee.set(card.employeeId, card.id);
     }
   }
   return state.employees
     .filter((employee) =>
       visibleCompanyIds.has(employee.companyId) &&
+      (!isBranchAdmin(user) || employee.branchId === user.branchId) &&
       (user.role !== "EMPLOYEE" || employee.id === user.employeeId)
     )
     .map((employee) => ({
       id: employee.id,
       companyId: employee.companyId,
       companyName: companyNames.get(employee.companyId) ?? "",
+      branchId: employee.branchId ?? null,
+      branchName: employee.branchId ? branchNames.get(employee.branchId) ?? "" : "",
       fullName: employee.fullName,
       email: employee.email,
       designation: employee.designation,
@@ -348,8 +399,33 @@ export async function getPlatformStatistics(user: AuthUser): Promise<PlatformSta
       : company.id === user.companyId
   );
   const byCompany = companies.map((company): CompanyStatistics => {
-    const employees = state.employees.filter((employee) => employee.companyId === company.id);
-    const cards = state.cards.filter((card) => card.companyId === company.id);
+    const employees = state.employees.filter((employee) =>
+      employee.companyId === company.id && (!isBranchAdmin(user) || employee.branchId === user.branchId)
+    );
+    const cards = state.cards.filter((card) =>
+      card.companyId === company.id && (!isBranchAdmin(user) || card.branchId === user.branchId)
+    );
+    const branchDetails = state.branches
+      .filter((branch) =>
+        branch.companyId === company.id && (!isBranchAdmin(user) || branch.id === user.branchId)
+      )
+      .map((branch): BranchStatistics => {
+        const branchEmployees = state.employees.filter((employee) =>
+          employee.companyId === company.id && employee.branchId === branch.id
+        );
+        const branchCards = state.cards.filter((card) =>
+          card.companyId === company.id && card.branchId === branch.id
+        );
+        return {
+          branchId: branch.id,
+          branchName: branch.name,
+          branchStatus: branch.status,
+          employees: branchEmployees.length,
+          cards: branchCards.length,
+          activeCards: branchCards.filter((card) => card.isActive).length,
+        };
+      })
+      .sort((left, right) => left.branchName.localeCompare(right.branchName));
     const employeeIds = new Set(employees.filter((employee) => employee.status === "active").map((employee) => employee.id));
     const activeQrCodes = cards.filter((card) =>
       card.isActive && employeeIds.has(card.employeeId ?? "") && company.status === "active"
@@ -358,6 +434,9 @@ export async function getPlatformStatistics(user: AuthUser): Promise<PlatformSta
       companyId: company.id,
       companyName: company.name,
       companyStatus: company.status,
+      branches: company.branchEnabled ? branchDetails.length : 0,
+      branchCards: branchDetails.reduce((sum, branch) => sum + branch.cards, 0),
+      branchDetails,
       employees: employees.length,
       cards: cards.length,
       activeCards: cards.filter((card) => card.isActive).length,
@@ -368,6 +447,8 @@ export async function getPlatformStatistics(user: AuthUser): Promise<PlatformSta
   return {
     companies: companies.length,
     activeCompanies: companies.filter((company) => company.status === "active").length,
+    branches: byCompany.reduce((sum, company) => sum + company.branches, 0),
+    branchCards: byCompany.reduce((sum, company) => sum + company.branchCards, 0),
     employees: byCompany.reduce((sum, company) => sum + company.employees, 0),
     cards: byCompany.reduce((sum, company) => sum + company.cards, 0),
     activeCards: byCompany.reduce((sum, company) => sum + company.activeCards, 0),
@@ -388,9 +469,26 @@ export async function getActivityLogsForUser(user: AuthUser): Promise<ActivityLo
         : company.id === user.companyId
     )
     .map((company) => [company.id, company.name]));
+  const branchEntityIds = isBranchAdmin(user)
+    ? new Set([
+        ...state.employees
+          .filter((employee) => employee.companyId === user.companyId && employee.branchId === user.branchId)
+          .map((employee) => `employee:${employee.id}`),
+        ...state.cards
+          .filter((card) => card.companyId === user.companyId && card.branchId === user.branchId)
+          .map((card) => `card:${card.id}`),
+      ])
+    : null;
   const accountEmails = new Map(state.users.map((account) => [account.id, account.email]));
   return state.activityLogs
-    .filter((log) => visibleCompanies.has(log.companyId))
+    .filter((log) =>
+      visibleCompanies.has(log.companyId) &&
+      (!branchEntityIds || (
+        log.entityType === "branch"
+          ? log.entityId === user.branchId
+          : branchEntityIds.has(`${log.entityType}:${log.entityId}`)
+      ))
+    )
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
     .map((log) => ({
       ...log,
@@ -405,22 +503,35 @@ function toBranch(row: Record<string, unknown>): BranchRecord {
     companyId: String(row.company_id),
     name: String(row.name),
     code: String(row.code ?? ""),
+    email: String(row.email ?? ""),
+    phone: String(row.phone ?? ""),
+    website: String(row.website ?? ""),
+    logoData: String(row.logo_data ?? ""),
     address: String(row.address ?? ""),
     city: String(row.city ?? ""),
     state: String(row.state ?? ""),
     country: String(row.country ?? ""),
+    description: String(row.description ?? ""),
     status: row.status === "inactive" ? "inactive" : "active",
+    preview: (row.preview ?? {}) as CompanyPreviewSettings,
+    theme: normalizeCompanyTheme(row.theme),
+    cardAppearance: normalizeCardAppearance(row.card_appearance),
   };
 }
 
 export async function listBranches(user: AuthUser, companyId: string): Promise<BranchRecord[]> {
-  if (!canManageCompany(user, companyId)) {
-    throw new AuthorizationError("You cannot manage branches for this company.");
+  requireCompanyAdmin(user);
+  if (!canViewCompany(user, companyId)) {
+    throw new AuthorizationError("You cannot view branches for this company.");
   }
   if (usesJsonStorage()) {
     const state = await readJsonPlatform();
+    const company = state.companies.find((item) => item.id === companyId);
+    if (!company?.branchEnabled) return [];
     return state.branches
-      .filter((branch) => branch.companyId === companyId)
+      .filter((branch) =>
+        branch.companyId === companyId && (!isBranchAdmin(user) || branch.id === user.branchId)
+      )
       .sort((left, right) => left.name.localeCompare(right.name));
   }
   const rows = await getDatabase()`
@@ -435,7 +546,8 @@ export async function listBranches(user: AuthUser, companyId: string): Promise<B
 export async function createBranch(
   user: AuthUser,
   companyId: string,
-  input: BranchInput
+  input: BranchInput,
+  admin: { email: string; passwordHash: string; status?: "active" | "inactive" }
 ): Promise<BranchRecord> {
   requireCompanyAdmin(user);
   if (!canManageCompany(user, companyId)) {
@@ -443,8 +555,15 @@ export async function createBranch(
   }
   if (usesJsonStorage()) {
     return updateJsonPlatform((state) => {
-      if (!state.companies.some((company) => company.id === companyId)) {
+      const company = state.companies.find((item) => item.id === companyId);
+      if (!company) {
         throw new Error("Company not found.");
+      }
+      if (!company.branchEnabled) {
+        throw new Error("Branch management is not enabled for this company.");
+      }
+      if (state.users.some((account) => account.email.toLowerCase() === admin.email.toLowerCase())) {
+        throw new Error("An account with this Branch Admin email already exists.");
       }
       if (state.branches.some((branch) =>
         branch.companyId === companyId && branch.name.toLowerCase() === input.name.toLowerCase()
@@ -455,11 +574,36 @@ export async function createBranch(
         id: randomUUID(),
         companyId,
         ...input,
-        status: "active" as const,
+        code: input.code ?? "",
+        email: input.email ?? "",
+        phone: input.phone ?? "",
+        website: input.website ?? company.website,
+        logoData: input.logoData ?? company.logoData,
+        address: input.address ?? "",
+        city: input.city ?? "",
+        state: input.state ?? "",
+        country: input.country ?? "",
+        description: input.description ?? "",
+        status: input.status ?? "active" as const,
+        preview: input.preview ?? company.preview,
+        theme: input.theme ?? company.theme,
+        cardAppearance: input.cardAppearance ?? company.cardAppearance,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
       state.branches.push(branch);
+      state.users.push({
+        id: randomUUID(),
+        email: admin.email.trim().toLowerCase(),
+        passwordHash: admin.passwordHash,
+        role: "COMPANY_ADMIN",
+        companyId,
+        branchId: branch.id,
+        employeeId: null,
+        status: admin.status ?? "active",
+        mustChangePassword: false,
+        createdAt: new Date().toISOString(),
+      });
       recordActivity(state, user, companyId, "created", "branch", branch.id);
       return branch;
     });
@@ -479,7 +623,8 @@ export async function updateBranch(
   user: AuthUser,
   companyId: string,
   branchId: string,
-  input: Partial<BranchInput> & { status?: "active" | "inactive" }
+  input: Partial<BranchInput> & { status?: "active" | "inactive" },
+  admin?: { email?: string; passwordHash?: string; status?: "active" | "inactive" }
 ): Promise<BranchRecord | null> {
   requireCompanyAdmin(user);
   if (!canManageCompany(user, companyId)) {
@@ -487,6 +632,8 @@ export async function updateBranch(
   }
   if (usesJsonStorage()) {
     return updateJsonPlatform((state) => {
+      const company = state.companies.find((item) => item.id === companyId);
+      if (!company?.branchEnabled) return null;
       const branch = state.branches.find((item) => item.id === branchId && item.companyId === companyId);
       if (!branch) return null;
       if (input.name && state.branches.some((item) =>
@@ -494,7 +641,42 @@ export async function updateBranch(
       )) {
         throw new Error("A branch with this name already exists in this company.");
       }
+      const adminAccount = state.users.find((item) =>
+        item.role === "COMPANY_ADMIN" && item.companyId === companyId && item.branchId === branchId
+      );
+      if (admin?.email && state.users.some((item) =>
+        item.id !== adminAccount?.id && item.email.toLowerCase() === admin.email!.toLowerCase()
+      )) {
+        throw new Error("An account with this Branch Admin email already exists.");
+      }
+      if (admin && adminAccount) {
+        if (admin.email !== undefined) adminAccount.email = admin.email.toLowerCase();
+        if (admin.passwordHash) adminAccount.passwordHash = admin.passwordHash;
+        if (admin.status) adminAccount.status = admin.status;
+      } else if (admin?.email && admin.passwordHash) {
+        state.users.push({
+          id: randomUUID(),
+          email: admin.email.toLowerCase(),
+          passwordHash: admin.passwordHash,
+          role: "COMPANY_ADMIN",
+          companyId,
+          branchId,
+          employeeId: null,
+          status: admin.status ?? "active",
+          mustChangePassword: false,
+          createdAt: new Date().toISOString(),
+        });
+      } else if (admin?.email || admin?.passwordHash) {
+        throw new Error("A new Branch Admin account requires an email and password.");
+      }
       Object.assign(branch, input, { updatedAt: new Date().toISOString() });
+      if (input.name) {
+        for (const card of state.cards) {
+          if (card.companyId === companyId && card.branchId === branchId) {
+            refreshCardPublicSlug(state, card, card.fullName, branch.name);
+          }
+        }
+      }
       recordActivity(state, user, companyId, "updated", "branch", branch.id);
       return branch;
     });
@@ -516,10 +698,72 @@ export async function updateBranch(
   return rows[0] ? toBranch(rows[0]) : null;
 }
 
+export async function deleteBranch(
+  user: AuthUser,
+  companyId: string,
+  branchId: string
+): Promise<boolean> {
+  requireCompanyAdmin(user);
+  if (!canManageCompany(user, companyId)) {
+    throw new AuthorizationError("You cannot delete branches for this company.");
+  }
+  if (usesJsonStorage()) {
+    return updateJsonPlatform((state) => {
+      const company = state.companies.find((item) => item.id === companyId);
+      if (!company?.branchEnabled) return false;
+      const index = state.branches.findIndex((item) => item.id === branchId && item.companyId === companyId);
+      if (index < 0) return false;
+      state.branches.splice(index, 1);
+      state.users = state.users.filter((item) => item.branchId !== branchId);
+      for (const employee of state.employees) {
+        if (employee.companyId === companyId && employee.branchId === branchId) delete employee.branchId;
+      }
+      for (const card of state.cards) {
+        if (card.companyId === companyId && card.branchId === branchId) {
+          delete card.branchId;
+          delete card.branchName;
+        }
+      }
+      recordActivity(state, user, companyId, "deleted", "branch", branchId);
+      return true;
+    });
+  }
+  const db = getDatabase();
+  const rows = await db`
+    DELETE FROM branches WHERE id = ${branchId} AND company_id = ${companyId}
+    RETURNING id
+  `;
+  return rows.length > 0;
+}
+
 export async function getCompany(user: AuthUser, companyId?: string | null): Promise<CompanyRecord | null> {
   const id = await getSelectedCompany(user, companyId);
   if (usesJsonStorage()) {
     const state = await readJsonPlatform();
+    if (isBranchAdmin(user)) {
+      const branch = state.branches.find((item) =>
+        item.id === user.branchId && item.companyId === id
+      );
+      if (!branch) return null;
+      return {
+        id,
+        name: branch.name,
+        email: branch.email,
+        phone: branch.phone,
+        website: branch.website,
+        logoData: branch.logoData,
+        address: branch.address,
+        city: branch.city,
+        state: branch.state,
+        country: branch.country,
+        description: branch.description,
+        status: branch.status,
+        branchEnabled: false,
+        preview: branch.preview,
+        theme: branch.theme,
+        cardAppearance: branch.cardAppearance,
+      };
+    }
     return state.companies.find((company) => company.id === id) ?? null;
   }
 
@@ -537,6 +781,7 @@ export async function createCompany(user: AuthUser, input: CompanyInput): Promis
       id: randomUUID(),
       ...input,
       logoData: input.logoData ?? "",
+      branchEnabled: input.branchEnabled ?? false,
       preview: input.preview ?? createDefaultCompanyPreview(input.name),
       theme: input.theme ?? DEFAULT_COMPANY_THEME,
       cardAppearance: input.cardAppearance ?? DEFAULT_CARD_APPEARANCE,
@@ -580,6 +825,7 @@ export async function createCompanyWithAdmin(
         id: randomUUID(),
         ...input,
         logoData: input.logoData ?? "",
+        branchEnabled: input.branchEnabled ?? false,
         preview: input.preview ?? createDefaultCompanyPreview(input.name),
         theme: input.theme ?? DEFAULT_COMPANY_THEME,
         cardAppearance: input.cardAppearance ?? DEFAULT_CARD_APPEARANCE,
@@ -660,6 +906,7 @@ export async function updateCompany(
         if (card.companyId === companyId) {
           card.company = company.name;
           card.website = company.website;
+          if (!card.branchId) refreshCardPublicSlug(state, card, card.fullName, company.name);
         }
       }
       const action = input.status && input.status !== previousStatus
@@ -698,6 +945,7 @@ export async function getCompanySettings(user: AuthUser, companyId?: string | nu
   if (!company) throw new Error("Company not found.");
   return {
     companyName: company.name,
+    address: company.address,
     website: company.website,
     logoData: company.logoData,
     preview: company.preview,
@@ -711,8 +959,34 @@ export async function saveCompanySettings(
   settings: CompanySettings
 ): Promise<CompanySettings> {
   const companyId = await getSelectedCompany(user);
+  if (isBranchAdmin(user)) {
+    if (!usesJsonStorage()) {
+      throw new AuthorizationError("Branch branding is only available in JSON storage.");
+    }
+    const updated = await updateJsonPlatform((state) => {
+      const branch = state.branches.find((item) =>
+        item.id === user.branchId && item.companyId === companyId
+      );
+      if (!branch) return null;
+      Object.assign(branch, {
+        name: settings.companyName,
+        address: settings.address,
+        website: settings.website,
+        logoData: settings.logoData,
+        preview: settings.preview,
+        theme: settings.theme,
+        cardAppearance: settings.cardAppearance,
+        updatedAt: new Date().toISOString(),
+      });
+      recordActivity(state, user, companyId, "updated", "branch", branch.id);
+      return branch;
+    });
+    if (!updated) throw new Error("Branch not found.");
+    return settings;
+  }
   const updated = await updateCompany(user, companyId, {
     name: settings.companyName,
+    address: settings.address,
     website: settings.website,
     logoData: settings.logoData,
     preview: settings.preview,
@@ -731,7 +1005,9 @@ export async function getCardsForUser(user: AuthUser): Promise<VisitingCard[]> {
     return state.cards
       .filter((card) => {
         if (user.role === "SUPER_ADMIN") return !activeCompanyId || card.companyId === activeCompanyId;
-        if (user.role === "COMPANY_ADMIN") return card.companyId === user.companyId;
+        if (user.role === "COMPANY_ADMIN") {
+          return card.companyId === user.companyId && (!user.branchId || card.branchId === user.branchId);
+        }
         return card.companyId === user.companyId && card.employeeId === user.employeeId;
       })
       .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
@@ -780,6 +1056,7 @@ export async function getCardForUser(user: AuthUser, id: string): Promise<Visiti
     const card = state.cards.find((item) => item.id === id);
     if (!card) return null;
     if (user.role === "COMPANY_ADMIN" && card.companyId !== user.companyId) return null;
+    if (user.branchId && card.branchId !== user.branchId) return null;
     if (user.role === "EMPLOYEE" &&
         (card.companyId !== user.companyId || card.employeeId !== user.employeeId)) return null;
     if (user.role === "SUPER_ADMIN") {
@@ -825,11 +1102,15 @@ export async function getCardForUser(user: AuthUser, id: string): Promise<Visiti
 export async function getPublicCard(id: string): Promise<{ card: VisitingCard; company: CompanySettings } | null> {
   if (usesJsonStorage()) {
     const state = await readJsonPlatform();
-    const storedCard = state.cards.find((item) => item.id === id && item.isActive);
+    const storedCard = state.cards.find((item) =>
+      (item.id === id || item.publicSlug === id) && item.isActive
+    );
     if (!storedCard) return null;
     const company = state.companies.find((item) => item.id === storedCard.companyId && item.status === "active");
     const employee = state.employees.find((item) => item.id === storedCard.employeeId && item.companyId === storedCard.companyId);
     if (!company || !employee || employee.status !== "active") return null;
+    const branch = state.branches.find((item) => item.id === storedCard.branchId && item.companyId === storedCard.companyId);
+    if (branch && branch.status !== "active") return null;
     const card = getLocalCard(storedCard, state);
     if (!card) return null;
     delete card.companyId;
@@ -839,12 +1120,12 @@ export async function getPublicCard(id: string): Promise<{ card: VisitingCard; c
     return {
       card,
       company: {
-        companyName: company.name,
-        website: company.website,
-        logoData: company.logoData,
-        preview: company.preview,
-        theme: normalizeCompanyTheme(company.theme),
-        cardAppearance: normalizeCardAppearance(company.cardAppearance),
+        companyName: branch?.name ?? company.name,
+        website: branch?.website || company.website,
+        logoData: branch?.logoData || company.logoData,
+        preview: branch?.preview ?? company.preview,
+        theme: normalizeCompanyTheme(branch?.theme ?? company.theme),
+        cardAppearance: normalizeCardAppearance(branch?.cardAppearance ?? company.cardAppearance),
       },
     };
   }
@@ -880,7 +1161,7 @@ export async function getPublicCard(id: string): Promise<{ card: VisitingCard; c
 
 export async function createCardForUser(
   user: AuthUser,
-  input: Omit<VisitingCard, "id" | "createdAt" | "isActive" | "preview" | "branchName" | "branchId"> & {
+  input: Omit<VisitingCard, "id" | "publicSlug" | "createdAt" | "isActive" | "preview" | "branchName" | "branchId"> & {
     branchId?: string | null;
   }
 ): Promise<VisitingCard> {
@@ -890,7 +1171,7 @@ export async function createCardForUser(
     return updateJsonPlatform((state) => {
       const company = state.companies.find((item) => item.id === companyId && item.status === "active");
       if (!company) throw new Error("Company not found or inactive.");
-      const branchId = input.branchId || undefined;
+      const branchId = user.branchId || input.branchId || undefined;
       const branch = branchId
         ? state.branches.find((item) => item.id === branchId && item.companyId === companyId && item.status === "active")
         : undefined;
@@ -903,6 +1184,7 @@ export async function createCardForUser(
       const employee: JsonEmployee = {
         id: employeeId,
         companyId,
+        ...(branchId ? { branchId } : {}),
         fullName: input.fullName,
         designation: input.designation,
         countryCode: input.countryCode,
@@ -920,14 +1202,15 @@ export async function createCardForUser(
         employeeId,
         branchId,
         branchName: branch?.name,
-        company: company.name,
-        website: company.website,
-        logoData: input.logoData ?? company.logoData,
+        company: branch?.name ?? company.name,
+        website: branch?.website || company.website,
+        logoData: input.logoData || branch?.logoData || company.logoData,
         backgroundColor: DEFAULT_CARD_BACKGROUND,
         accentColor: DEFAULT_CARD_ACCENT,
         isActive: true,
         createdAt: new Date().toISOString(),
       };
+      refreshCardPublicSlug(state, card, card.fullName, branch?.name ?? company.name);
       state.employees.push(employee);
       state.cards.unshift(card);
       recordActivity(state, user, companyId, "created", "employee", employeeId);
@@ -987,7 +1270,7 @@ export async function updateCardForUser(
   if (!current) return null;
   const companyId = current.companyId;
   const employeeId = current.employeeId;
-  if (!companyId || !employeeId || !canAccessCard(user, companyId, employeeId)) return null;
+  if (!companyId || !employeeId || !canAccessCard(user, companyId, employeeId, current.branchId)) return null;
   if (usesJsonStorage()) {
     return updateJsonPlatform((state) => {
       const card = state.cards.find((item) =>
@@ -997,16 +1280,20 @@ export async function updateCardForUser(
         item.id === employeeId && item.companyId === companyId
       );
       if (!card || !employee) return null;
-      if (input.branchId !== undefined) {
-        const branch = input.branchId
+      const branchId = user.branchId ?? input.branchId;
+      if (user.branchId || input.branchId !== undefined) {
+        const branch = branchId
           ? state.branches.find((item) =>
-              item.id === input.branchId &&
+              item.id === branchId &&
               item.companyId === companyId &&
               (item.status === "active" || item.id === card.branchId)
             )
           : undefined;
-        if (input.branchId && !branch) throw new BranchAssignmentError();
-        card.branchId = input.branchId ?? undefined;
+        if (branchId && !branch) throw new BranchAssignmentError();
+        card.branchId = branchId ?? undefined;
+        card.branchName = branch?.name;
+        if (branchId) employee.branchId = branchId;
+        else delete employee.branchId;
       }
       const email = input.email.trim().toLowerCase();
       if (state.employees.some((item) =>
@@ -1025,6 +1312,9 @@ export async function updateCardForUser(
         linkedinName: input.linkedinName ?? "",
       };
       Object.assign(card, updatedFields, { logoData: input.logoData });
+      const currentCompany = state.companies.find((item) => item.id === card.companyId);
+      const currentBranch = state.branches.find((item) => item.id === card.branchId && item.companyId === card.companyId);
+      refreshCardPublicSlug(state, card, card.fullName, currentBranch?.name ?? currentCompany?.name ?? card.company);
       Object.assign(employee, updatedFields);
       recordActivity(state, user, companyId, "updated", "employee", employeeId);
       recordActivity(state, user, companyId, "updated", "card", id);
@@ -1072,7 +1362,7 @@ export async function setCardActiveForUser(
   isActive: boolean
 ): Promise<VisitingCard | null> {
   const current = await getCardForUser(user, id);
-  if (!current || !canManageCard(user, current.companyId ?? "", current.employeeId ?? "")) return null;
+  if (!current || !canManageCard(user, current.companyId ?? "", current.employeeId ?? "", current.branchId)) return null;
   const companyId = current.companyId;
   const employeeId = current.employeeId;
   if (!companyId || !employeeId) return null;
@@ -1113,7 +1403,7 @@ export async function setCardPreviewForUser(
   preview: CompanyPreviewSettings | undefined
 ): Promise<VisitingCard | null> {
   const current = await getCardForUser(user, id);
-  if (!current || !canManageCard(user, current.companyId ?? "", current.employeeId ?? "")) return null;
+  if (!current || !canManageCard(user, current.companyId ?? "", current.employeeId ?? "", current.branchId)) return null;
   const companyId = current.companyId;
   const employeeId = current.employeeId;
   if (!companyId || !employeeId) return null;

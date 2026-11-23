@@ -4,11 +4,12 @@ import {
   Activity,
   ArrowRight,
   Building2,
+  CheckCircle2,
+  CirclePause,
   CreditCard,
   QrCode,
   ShieldCheck,
   Plus,
-  UserPlus,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -43,7 +44,7 @@ type Metric = {
   value: number;
   detail: string;
   icon: LucideIcon;
-  tone: "blue" | "green" | "violet" | "amber";
+  tone: "blue" | "green" | "teal" | "slate";
 };
 
 const activityEntityNames: Record<string, string> = {
@@ -51,7 +52,6 @@ const activityEntityNames: Record<string, string> = {
   employee: "Employee",
   card: "Visiting card",
   "company-admin": "Company Admin",
-  branch: "Branch",
   account: "Account",
 };
 
@@ -85,9 +85,6 @@ const activityTitles: Record<string, string> = {
   "company-admin:activated": "Company Admin activated",
   "company-admin:deactivated": "Company Admin deactivated",
   "company-admin:deleted": "Company Admin deleted",
-  "branch:created": "Branch added",
-  "branch:updated": "Branch updated",
-  "branch:deleted": "Branch deleted",
   "account:password-changed": "Account password changed",
   "qr-code:generated": "QR code generated",
 };
@@ -112,15 +109,13 @@ const activityDescriptions: Record<string, string> = {
   "company-admin:activated": "Company Admin account activated.",
   "company-admin:deactivated": "Company Admin account deactivated.",
   "company-admin:deleted": "Company Admin account deleted.",
-  "branch:created": "Branch created.",
-  "branch:updated": "Branch information changed.",
-  "branch:deleted": "Branch removed.",
   "account:password-changed": "Account password changed.",
   "qr-code:generated": "Generated with the visiting card.",
 };
 
 function getRecentActivities(activities: ActivityLogOverview[]): RecentActivity[] {
   return activities
+    .filter((activity) => activity.entityType !== "branch")
     .flatMap((activity): RecentActivity[] => {
       const eventKey = `${activity.entityType}:${activity.action}`;
       const base = {
@@ -168,7 +163,7 @@ function BarRow({
   label: string;
   value: number;
   maxValue: number;
-  tone: "blue" | "violet";
+  tone: "blue" | "teal";
 }) {
   const width = maxValue === 0 ? 0 : (value / maxValue) * 100;
   return (
@@ -183,7 +178,7 @@ function BarRow({
         className="h-2.5 overflow-hidden rounded-full bg-slate-100"
       >
         <div
-          className={`h-full rounded-full ${tone === "blue" ? "bg-blue-600" : "bg-violet-500"}`}
+          className={`h-full rounded-full ${tone === "blue" ? "bg-blue-600" : "bg-teal-500"}`}
           style={{ width: `${width}%` }}
         />
       </div>
@@ -206,10 +201,10 @@ export default function SuperAdminDashboard({
     ...analytics.byCompany.flatMap((company) => [company.cards, company.activeCards]),
   );
   const metrics: Metric[] = [
-    { label: "Total Companies", value: analytics.companies, detail: `${numberFormat.format(analytics.activeCompanies)} active`, icon: Building2, tone: "blue" },
-    { label: "Total Employees", value: analytics.employees, detail: "Across all companies", icon: Users, tone: "green" },
-    { label: "Total Visiting Cards", value: analytics.cards, detail: "Across all companies", icon: CreditCard, tone: "violet" },
-    { label: "Total QR Codes", value: analytics.cards, detail: `${numberFormat.format(analytics.activeQrCodes)} currently active`, icon: QrCode, tone: "amber" },
+    { label: "Total Companies", value: analytics.companies, detail: "Company workspaces", icon: Building2, tone: "blue" },
+    { label: "Active Companies", value: analytics.activeCompanies, detail: "Currently active", icon: CheckCircle2, tone: "green" },
+    { label: "Inactive Companies", value: analytics.companies - analytics.activeCompanies, detail: "Currently inactive", icon: CirclePause, tone: "slate" },
+    { label: "Total Cards", value: analytics.cards, detail: "Across all companies", icon: CreditCard, tone: "teal" },
   ];
 
   return (
@@ -217,49 +212,53 @@ export default function SuperAdminDashboard({
       <Sidebar />
       <main className="min-w-0 flex-1 p-5 md:p-8 xl:p-10">
         <div className="mx-auto max-w-[1440px] space-y-8">
-          <header className="flex flex-col gap-5 border-b border-slate-200 pb-6 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700">Platform management</p>
-              <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Super Admin Dashboard</h1>
-              <p className="mt-2 text-sm text-slate-500">A live overview of companies, people, visiting cards, and activity.</p>
-            </div>
-            <div className="flex flex-col gap-3 lg:items-end">
-              <div className="flex flex-wrap items-center gap-2">
-                <CompanyNotifications locale={locale} showCompany />
-                <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-600 shadow-sm">
-                  <ShieldCheck size={15} />Super Admin
-                </span>
+          <header className="super-admin-hero relative isolate overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 px-6 py-7 text-white shadow-xl shadow-slate-900/10 sm:px-8 sm:py-9">
+            <div aria-hidden="true" className="absolute -right-16 -top-28 -z-10 h-80 w-80 rounded-full border-[40px] border-white/[0.04]" />
+            <div aria-hidden="true" className="absolute right-24 top-16 -z-10 h-44 w-44 rounded-full bg-cyan-400/10 blur-3xl" />
+            <div className="flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between">
+              <div className="max-w-2xl">
+                <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Super Admin Dashboard</h1>
+                <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300 sm:text-base">
+                  Your platform at a glance. Monitor company workspaces, teams, and digital card adoption.
+                </p>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="mr-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Quick actions</span>
-                <Link href="/companies?createCompany=true" className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-800">
-                  <Plus size={16} />Add Company
-                </Link>
-                <Link href="/companies" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                  <UserPlus size={16} />Add Company Admin
-                </Link>
+              <div className="flex shrink-0 flex-col items-end gap-4">
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <span className="inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-300/10 px-3 py-1.5 text-xs font-semibold text-cyan-100">
+                    <ShieldCheck size={14} />Platform management
+                  </span>
+                  <CompanyNotifications locale={locale} showCompany />
+                </div>
+                <div className="flex flex-wrap justify-end gap-3">
+                  <Link href="/companies?createCompany=true" className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-950/30 hover:bg-blue-500">
+                    <Plus size={17} />Create company
+                  </Link>
+                </div>
               </div>
             </div>
           </header>
 
           <section aria-label="Overview statistics" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {metrics.map(({ label, value, detail, icon: Icon, tone }) => (
-              <article key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex items-start justify-between gap-4">
+              <article key={label} className="group rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-900/[0.025] transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md">
+                <div className="flex items-center justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-500">{label}</p>
-                    <p className="mt-3 text-3xl font-bold tracking-tight text-slate-950">{numberFormat.format(value)}</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+                    <p className="mt-3 text-3xl font-bold tracking-tight text-slate-950 tabular-nums">{numberFormat.format(value)}</p>
                   </div>
                   <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
-                    tone === "green" ? "bg-emerald-50 text-emerald-700"
-                      : tone === "violet" ? "bg-violet-50 text-violet-700"
-                        : tone === "amber" ? "bg-amber-50 text-amber-700"
-                          : "bg-blue-50 text-blue-700"
+                    tone === "green" ? "bg-emerald-50 text-emerald-700 group-hover:bg-emerald-100"
+                      : tone === "teal" ? "bg-teal-50 text-teal-700 group-hover:bg-teal-100"
+                        : tone === "slate" ? "bg-slate-100 text-slate-600 group-hover:bg-slate-200"
+                          : "bg-blue-50 text-blue-700 group-hover:bg-blue-100"
                   }`}>
                     <Icon size={20} aria-hidden="true" />
                   </span>
                 </div>
-                <p className="mt-3 text-xs text-slate-500">{detail}</p>
+                <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-500">
+                  {label === "Active Companies" && <CheckCircle2 size={13} className="text-emerald-600" aria-hidden="true" />}
+                  {detail}
+                </p>
               </article>
             ))}
           </section>
@@ -268,8 +267,8 @@ export default function SuperAdminDashboard({
             <section aria-labelledby="company-overview-title" className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm xl:col-span-3">
               <header className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:px-6">
                 <div>
-                  <h2 id="company-overview-title" className="font-bold text-slate-950">Company Overview</h2>
-                  <p className="mt-1 text-xs text-slate-500">Company workspaces and their current activity.</p>
+                  <h2 id="company-overview-title" className="font-bold text-slate-950">Company portfolio</h2>
+                  <p className="mt-1 text-xs text-slate-500">Workspace health, team size, and card activity.</p>
                 </div>
                 <Link href="/companies" className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-blue-700 hover:text-blue-800">
                   All companies <ArrowRight size={15} />
@@ -279,11 +278,12 @@ export default function SuperAdminDashboard({
                 <p className="p-6 text-sm text-slate-500">No companies have been added yet.</p>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[690px] text-left text-sm">
+                  <table className="w-full min-w-[880px] text-left text-sm">
                     <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                       <tr>
                         <th scope="col" className="px-5 py-3">Company</th>
                         <th scope="col" className="px-4 py-3">Employees</th>
+                        <th scope="col" className="px-4 py-3">Branches</th>
                         <th scope="col" className="px-4 py-3">Visiting cards</th>
                         <th scope="col" className="px-4 py-3">Status</th>
                         <th scope="col" className="px-5 py-3 text-right">Details</th>
@@ -314,6 +314,7 @@ export default function SuperAdminDashboard({
                               </div>
                             </td>
                             <td className="px-4 py-4 tabular-nums text-slate-600">{numberFormat.format(statistics?.employees ?? 0)}</td>
+                            <td className="px-4 py-4 tabular-nums text-slate-600">{numberFormat.format(statistics?.branches ?? 0)}</td>
                             <td className="px-4 py-4 tabular-nums text-slate-600">{numberFormat.format(statistics?.cards ?? 0)}</td>
                             <td className="px-4 py-4">
                               <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
@@ -324,7 +325,7 @@ export default function SuperAdminDashboard({
                             </td>
                             <td className="px-5 py-4 text-right">
                               <Link
-                                href={`/companies?companyId=${encodeURIComponent(company.id)}`}
+                                href={`/my-cards?companyId=${encodeURIComponent(company.id)}`}
                                 className="inline-flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50"
                               >
                                 View details <ArrowRight size={14} />
@@ -357,7 +358,7 @@ export default function SuperAdminDashboard({
                   {recentActivities.map((activity) => (
                     <li key={activity.id} className="flex gap-3 px-5 py-4 sm:px-6">
                       <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
-                        {activity.entityType === "company" || activity.entityType === "branch" ? <Building2 size={16} />
+                        {activity.entityType === "company" ? <Building2 size={16} />
                           : activity.entityType === "employee" || activity.entityType === "company-admin" || activity.entityType === "account" ? <Users size={16} />
                             : activity.entityType === "qr-code" ? <QrCode size={16} />
                               : <CreditCard size={16} />}
@@ -380,7 +381,7 @@ export default function SuperAdminDashboard({
                 </div>
                 <div className="flex flex-wrap gap-4 text-xs font-medium text-slate-600">
                     <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-blue-600" />Total cards</span>
-                    <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-violet-500" />Active cards</span>
+                    <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-teal-500" />Active cards</span>
                 </div>
               </header>
               {analytics.byCompany.length === 0 ? (
@@ -392,7 +393,7 @@ export default function SuperAdminDashboard({
                       <p className="truncate text-sm font-semibold text-slate-800" title={company.companyName}>{company.companyName}</p>
                       <div className="space-y-2.5">
                         <BarRow label="Total cards" value={company.cards} maxValue={maxChartValue} tone="blue" />
-                        <BarRow label="Active cards" value={company.activeCards} maxValue={maxChartValue} tone="violet" />
+                        <BarRow label="Active cards" value={company.activeCards} maxValue={maxChartValue} tone="teal" />
                       </div>
                     </div>
                   ))}

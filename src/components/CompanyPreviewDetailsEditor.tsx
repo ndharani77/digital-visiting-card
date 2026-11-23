@@ -20,7 +20,6 @@ import {
 } from "@/lib/company-content";
 
 let entryCounter = 0;
-const NO_DEFAULT_SERVICE_IDS: string[] = [];
 
 function createEntryId() {
   const cryptoApi = globalThis.crypto;
@@ -76,7 +75,6 @@ type CompanyPreviewDetailsEditorProps = {
   initialCardId?: string;
   initialPreview?: CompanyPreviewSettings;
   initialIsCustom?: boolean;
-  initialDefaultServiceIds?: string[];
   onSaved?: (preview: CompanyPreviewSettings, isCustom: boolean) => void;
   onClose?: () => void;
 };
@@ -86,14 +84,12 @@ export default function CompanyPreviewDetailsEditor({
   initialCardId,
   initialPreview,
   initialIsCustom = false,
-  initialDefaultServiceIds = NO_DEFAULT_SERVICE_IDS,
   onSaved,
   onClose,
 }: CompanyPreviewDetailsEditorProps) {
   const [preview, setPreview] = useState<CompanyPreviewSettings>(initialPreview ?? DEFAULT_COMPANY_PREVIEW);
   const [cardId, setCardId] = useState(initialCardId ?? "");
   const [isCustom, setIsCustom] = useState(initialIsCustom);
-  const [defaultServiceIds, setDefaultServiceIds] = useState(initialDefaultServiceIds);
   const [activeSlide, setActiveSlide] = useState("about");
   const [newTabDrawerOpen, setNewTabDrawerOpen] = useState(false);
   const [newTabTitle, setNewTabTitle] = useState("");
@@ -118,7 +114,6 @@ export default function CompanyPreviewDetailsEditor({
       setCardId(initialCardId);
       setPreview(initialPreview);
       setIsCustom(initialIsCustom);
-      setDefaultServiceIds(initialDefaultServiceIds);
       setLoaded(true);
       setLoading(false);
       return;
@@ -163,14 +158,7 @@ export default function CompanyPreviewDetailsEditor({
           if (!("isCustom" in result) || typeof result.isCustom !== "boolean") {
             throw new Error("Card preview response is invalid.");
           }
-          if (!("defaultServiceIds" in result) || !Array.isArray(result.defaultServiceIds) ||
-              !result.defaultServiceIds.every((serviceId) => typeof serviceId === "string")) {
-            throw new Error("Company default services response is invalid.");
-          }
           setIsCustom(result.isCustom);
-          setDefaultServiceIds(result.defaultServiceIds);
-        } else {
-          setDefaultServiceIds([]);
         }
         setLoaded(true);
       } catch (err) {
@@ -181,7 +169,7 @@ export default function CompanyPreviewDetailsEditor({
     }
     void loadPreview();
     return () => { cancelled = true; };
-  }, [embedded, initialCardId, initialDefaultServiceIds, initialIsCustom, initialPreview]);
+  }, [embedded, initialCardId, initialIsCustom, initialPreview]);
 
   useEffect(() => {
     if (!focusItemId) return;
@@ -338,10 +326,6 @@ export default function CompanyPreviewDetailsEditor({
     setNewTabFields((current) => current.map((field) => field.id === fieldId ? { ...field, ...update } : field));
   }
 
-  function isCustomTabFieldType(value: string): value is CompanyCustomTabField["type"] {
-    return value === "heading" || value === "text" || value === "image" || value === "service";
-  }
-
   function createNewTab() {
     const title = newTabTitle.trim();
     if (!title) {
@@ -479,6 +463,9 @@ export default function CompanyPreviewDetailsEditor({
             <p className="mt-1 text-sm text-slate-500">{cardId
               ? "Customize the About Us, Services, Enquiry form, and default WhatsApp message for this card. Until saved, it uses company-wide defaults."
               : "Manage the default About Us, Services, Enquiry content, and WhatsApp message used by cards without custom preview details. Enquiries continue to open the card owner’s email app."}</p>
+            <p className="mt-2 text-xs font-medium text-blue-700">{cardId
+              ? "Changes saved here apply only to this card."
+              : "Company-wide defaults apply to cards without individual preview customizations."}</p>
           </header>
 
           <div role="group" aria-label="Preview detail tabs" className="mb-6 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
@@ -616,38 +603,40 @@ export default function CompanyPreviewDetailsEditor({
                 <div>
                   <h2 id="preview-details-services-title" className="text-lg font-bold text-slate-900">Services</h2>
                   <p className="mt-1 text-sm text-slate-500">{cardId
-                    ? "Company default services are included automatically. Add or remove card-specific services below."
+                    ? "Edit the tab and every service for this card only."
                     : "Manage the default services shown on cards in this company."}</p>
                 </div>
                 <AddButton onClick={addService}>Add service</AddButton>
               </div>
-              <fieldset disabled={Boolean(cardId)} className={`mb-5 ${cardId ? "opacity-70" : ""}`}>
+              <div className="mb-5">
                 <div className="grid gap-5 sm:grid-cols-2">
                   <TextField label="Tab label" maxLength={100} value={preview.tabs.services} onChange={(value) => setPreview((current) => ({ ...current, tabs: { ...current.tabs, services: value } }))} />
                   <TextField label="Section heading" value={preview.services.title} onChange={(value) => setPreview((current) => ({ ...current, services: { ...current.services, title: value } }))} />
                   <TextField label="More link label" maxLength={100} value={preview.services.moreLabel} onChange={(value) => setPreview((current) => ({ ...current, services: { ...current.services, moreLabel: value } }))} />
                   <TextField label="More link URL" maxLength={2048} value={preview.services.moreLink} onChange={(value) => setPreview((current) => ({ ...current, services: { ...current.services, moreLink: value } }))} />
                 </div>
-              </fieldset>
+              </div>
               <div className="space-y-5">
                 {preview.services.items.map((service, index) => {
-                  const isCompanyDefault = Boolean(cardId && defaultServiceIds.includes(service.id));
                   return (
                     <article key={service.id} id={`preview-entry-${service.id}`} tabIndex={-1} className="space-y-4 rounded-xl border border-slate-200 p-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
                       <div className="flex items-center justify-between gap-3">
                         <h3 className="font-semibold text-slate-900">Service {index + 1}</h3>
-                        {isCompanyDefault
-                          ? <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">Company default</span>
-                          : <RemoveButton label={`Remove service ${index + 1}`} onClick={() => setPreview((current) => ({ ...current, services: { ...current.services, items: current.services.items.filter((item) => item.id !== service.id) } }))} />}
+                        <RemoveButton label={`Remove service ${index + 1}`} onClick={() => setPreview((current) => ({ ...current, services: { ...current.services, items: current.services.items.filter((item) => item.id !== service.id) } }))} />
                       </div>
-                      <fieldset disabled={isCompanyDefault} className={`space-y-4 ${isCompanyDefault ? "opacity-70" : ""}`}>
+                      <div className="space-y-4">
                         <div className="grid gap-4 sm:grid-cols-2">
                           <TextField label="Title" value={service.title} onChange={(value) => updateService(service.id, "title", value)} />
                           <TextField label="Link URL" maxLength={2048} value={service.href} onChange={(value) => updateService(service.id, "href", value)} />
                         </div>
                         <TextArea label="Description" value={service.description} onChange={(value) => updateService(service.id, "description", value)} />
-                        <ImageEditor label="Service image" value={service.image} onChange={(event) => { void uploadImage(event, (value) => updateService(service.id, "image", value)); }} />
-                      </fieldset>
+                        <ImageEditor
+                          label="Service image"
+                          value={service.image}
+                          onChange={(value) => updateService(service.id, "image", value)}
+                          onUpload={(event) => { void uploadImage(event, (value) => updateService(service.id, "image", value)); }}
+                        />
+                      </div>
                     </article>
                   );
                 })}
@@ -701,48 +690,22 @@ export default function CompanyPreviewDetailsEditor({
                   <RemoveButton label={`Remove ${tab.title || "custom"} tab`} onClick={() => removeCustomTab(tab.id)} />
                 </div>
                 <div className="mb-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-5">
-                  <h3 className="font-semibold text-slate-900">Tab fields</h3>
+                  <div>
+                    <h3 className="font-semibold text-slate-900">Tab fields</h3>
+                    <p className="mt-1 text-xs text-slate-500">Each field can have an optional heading, description, and image.</p>
+                  </div>
                   <AddButton onClick={() => addCustomTabField(tab.id)}>Add field</AddButton>
                 </div>
                 <div className="space-y-4">
                   {tab.fields.map((field, index) => (
-                    <article key={field.id} id={`preview-entry-${field.id}`} tabIndex={-1} className="space-y-4 rounded-xl border border-slate-200 p-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <div className="flex items-end gap-3">
-                        <label className="block min-w-0 flex-1">
-                          <span className="mb-2 block text-sm font-semibold text-slate-700">Field {index + 1} type</span>
-                          <select value={field.type} onChange={(event) => {
-                            if (isCustomTabFieldType(event.target.value)) updateCustomTabField(tab.id, field.id, {
-                              type: event.target.value,
-                              content: "",
-                              title: "",
-                              href: "",
-                              description: "",
-                              image: "",
-                            });
-                          }} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500">
-                            <option value="heading">Heading</option>
-                            <option value="text">Text</option>
-                            <option value="image">Image</option>
-                            <option value="service">Service card</option>
-                          </select>
-                        </label>
-                        <RemoveButton label={`Remove field ${index + 1}`} onClick={() => updateCustomTab(tab.id, { fields: tab.fields.filter((item) => item.id !== field.id) })} />
-                      </div>
-                      {field.type === "service" ? (
-                        <>
-                          <div className="grid gap-4 sm:grid-cols-2">
-                            <TextField label="Title" value={field.title ?? ""} onChange={(value) => updateCustomTabField(tab.id, field.id, { title: value })} />
-                            <TextField label="Link URL" maxLength={2048} value={field.href ?? ""} onChange={(value) => updateCustomTabField(tab.id, field.id, { href: value })} />
-                          </div>
-                          <TextArea label="Description" value={field.description ?? ""} onChange={(value) => updateCustomTabField(tab.id, field.id, { description: value })} />
-                          <ImageEditor label="Service image" value={field.image ?? ""} onChange={(value) => updateCustomTabField(tab.id, field.id, { image: value })} onUpload={(event) => { void uploadImage(event, (value) => updateCustomTabField(tab.id, field.id, { image: value })); }} />
-                        </>
-                      ) : field.type === "heading"
-                        ? <TextField label="Heading text" maxLength={200} value={field.content} onChange={(value) => updateCustomTabField(tab.id, field.id, { content: value })} />
-                        : field.type === "text"
-                          ? <TextArea label="Text content" value={field.content} onChange={(value) => updateCustomTabField(tab.id, field.id, { content: value })} />
-                          : <ImageEditor label="Image" value={field.content} onChange={(value) => updateCustomTabField(tab.id, field.id, { content: value })} onUpload={(event) => { void uploadImage(event, (value) => updateCustomTabField(tab.id, field.id, { content: value })); }} />}
-                    </article>
+                    <CustomTabFieldEditor
+                      key={field.id}
+                      field={field}
+                      index={index}
+                      onChange={(update) => updateCustomTabField(tab.id, field.id, update)}
+                      onRemove={() => updateCustomTab(tab.id, { fields: tab.fields.filter((item) => item.id !== field.id) })}
+                      onUploadImage={(event, onChange) => { void uploadImage(event, onChange); }}
+                    />
                   ))}
                 </div>
               </section>
@@ -752,12 +715,12 @@ export default function CompanyPreviewDetailsEditor({
           {loading && <p role="status" className="mt-5 text-sm text-slate-500">Loading preview details...</p>}
           {error && <p role="alert" className="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
           {message && <p role="status" className="mt-5 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700">{message}</p>}
-          <div className="mt-7 flex justify-end border-t border-slate-200 pt-6">
+          <footer className="sticky bottom-0 z-20 mt-7 flex justify-end border-t border-slate-200 bg-white/95 px-2 py-4 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur sm:px-0">
             <div className="flex flex-wrap justify-end gap-3">
               {cardId && <button type="button" onClick={() => { void restoreCompanyDefaults(); }} disabled={loading || !loaded || saving || !isCustom} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"><RotateCcw size={17} />Use company defaults</button>}
               <button type="button" onClick={() => { void save(); }} disabled={loading || !loaded || saving} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"><Save size={17} />{saving ? "Saving..." : "Save preview details"}</button>
             </div>
-          </div>
+          </footer>
         </div>
       </main>
       {newTabDrawerOpen && (
@@ -778,49 +741,20 @@ export default function CompanyPreviewDetailsEditor({
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
                     <h3 className="font-semibold text-slate-900">Content fields</h3>
-                    <p className="mt-1 text-xs text-slate-500">Add headings, text, and images in any combination.</p>
+                    <p className="mt-1 text-xs text-slate-500">Every field can include an optional heading, description, and image.</p>
                   </div>
                   <AddButton onClick={addNewTabField}>Add field</AddButton>
                 </div>
                 <div className="space-y-4">
                   {newTabFields.map((field, index) => (
-                    <article key={field.id} className="space-y-4 rounded-xl border border-slate-200 p-4">
-                      <div className="flex items-end gap-3">
-                        <label className="block min-w-0 flex-1">
-                          <span className="mb-2 block text-sm font-semibold text-slate-700">Field {index + 1} type</span>
-                          <select value={field.type} onChange={(event) => {
-                            if (isCustomTabFieldType(event.target.value)) updateNewTabField(field.id, {
-                              type: event.target.value,
-                              content: "",
-                              title: "",
-                              href: "",
-                              description: "",
-                              image: "",
-                            });
-                          }} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500">
-                            <option value="heading">Heading</option>
-                            <option value="text">Text</option>
-                            <option value="image">Image</option>
-                            <option value="service">Service card</option>
-                          </select>
-                        </label>
-                        <RemoveButton label={`Remove field ${index + 1}`} onClick={() => setNewTabFields((current) => current.filter((item) => item.id !== field.id))} />
-                      </div>
-                      {field.type === "service" ? (
-                        <>
-                          <div className="grid gap-4 sm:grid-cols-2">
-                            <TextField label="Title" value={field.title ?? ""} onChange={(value) => updateNewTabField(field.id, { title: value })} />
-                            <TextField label="Link URL" maxLength={2048} value={field.href ?? ""} onChange={(value) => updateNewTabField(field.id, { href: value })} />
-                          </div>
-                          <TextArea label="Description" value={field.description ?? ""} onChange={(value) => updateNewTabField(field.id, { description: value })} />
-                          <ImageEditor label="Service image" value={field.image ?? ""} onChange={(value) => updateNewTabField(field.id, { image: value })} onUpload={(event) => { void uploadImage(event, (value) => updateNewTabField(field.id, { image: value })); }} />
-                        </>
-                      ) : field.type === "heading"
-                        ? <TextField label="Heading text" maxLength={200} value={field.content} onChange={(value) => updateNewTabField(field.id, { content: value })} />
-                        : field.type === "text"
-                          ? <TextArea label="Text content" value={field.content} onChange={(value) => updateNewTabField(field.id, { content: value })} />
-                          : <ImageEditor label="Image" value={field.content} onChange={(value) => updateNewTabField(field.id, { content: value })} onUpload={(event) => { void uploadImage(event, (value) => updateNewTabField(field.id, { content: value })); }} />}
-                    </article>
+                    <CustomTabFieldEditor
+                      key={field.id}
+                      field={field}
+                      index={index}
+                      onChange={(update) => updateNewTabField(field.id, update)}
+                      onRemove={() => setNewTabFields((current) => current.filter((item) => item.id !== field.id))}
+                      onUploadImage={(event, onChange) => { void uploadImage(event, onChange); }}
+                    />
                   ))}
                 </div>
               </div>
@@ -834,6 +768,82 @@ export default function CompanyPreviewDetailsEditor({
         </div>
       )}
     </div>
+  );
+}
+
+function CustomTabFieldEditor({
+  field,
+  index,
+  onChange,
+  onRemove,
+  onUploadImage,
+}: {
+  field: CompanyCustomTabField;
+  index: number;
+  onChange: (update: Partial<CompanyCustomTabField>) => void;
+  onRemove: () => void;
+  onUploadImage: (event: ChangeEvent<HTMLInputElement>, onChange: (value: string) => void) => void;
+}) {
+  const heading = field.type === "heading" ? field.content : field.title ?? "";
+  const description = field.type === "text" ? field.content : field.description ?? "";
+  const image = field.type === "image" ? field.content : field.image ?? "";
+
+  function isFieldType(value: string): value is CompanyCustomTabField["type"] {
+    return value === "heading" || value === "text" || value === "image" || value === "service";
+  }
+
+  function updateHeading(value: string) {
+    onChange(field.type === "heading" ? { content: value } : { title: value });
+  }
+
+  function updateDescription(value: string) {
+    onChange(field.type === "text" ? { content: value } : { description: value });
+  }
+
+  function updateImage(value: string) {
+    onChange(field.type === "image" ? { content: value } : { image: value });
+  }
+
+  return (
+    <article
+      id={`preview-entry-${field.id}`}
+      tabIndex={-1}
+      className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+    >
+      <div className="flex items-end gap-3">
+        <label className="block min-w-0 flex-1">
+          <span className="mb-2 block text-sm font-semibold text-slate-700">Field {index + 1} type</span>
+          <select
+            value={field.type}
+            onChange={(event) => {
+              if (isFieldType(event.target.value)) {
+                onChange({ type: event.target.value, content: "", title: "", href: "", description: "", image: "" });
+              }
+            }}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+          >
+            <option value="heading">Heading</option>
+            <option value="text">Text</option>
+            <option value="image">Image</option>
+            <option value="service">Service card</option>
+          </select>
+        </label>
+        <RemoveButton label={`Remove field ${index + 1}`} onClick={onRemove} />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <TextField label="Heading (optional)" maxLength={200} value={heading} onChange={updateHeading} />
+        {field.type === "service" && (
+          <TextField label="Link URL (optional)" maxLength={2048} value={field.href ?? ""} onChange={(value) => onChange({ href: value })} />
+        )}
+      </div>
+      <TextArea label="Description (optional)" value={description} onChange={updateDescription} />
+      <ImageEditor
+        label="Image (optional)"
+        value={image}
+        onChange={updateImage}
+        onUpload={(event) => onUploadImage(event, updateImage)}
+      />
+    </article>
   );
 }
 

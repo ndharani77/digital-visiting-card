@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent, type ChangeEvent } from "react";
-import { Building2, Crop, Globe, ImagePlus, Save } from "lucide-react";
+import { Building2, Crop, Globe, ImagePlus, MapPin, Save } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import { DEFAULT_COMPANY, DEFAULT_COMPANY_LOGO, DEFAULT_WEBSITE } from "@/lib/card-defaults";
 import { DEFAULT_COMPANY_PREVIEW, isCompanyPreviewSettings } from "@/lib/company-content";
@@ -10,6 +10,7 @@ import type { CompanySettings } from "@/lib/company-settings";
 
 const initialSettings: CompanySettings = {
   companyName: DEFAULT_COMPANY,
+  address: "",
   website: DEFAULT_WEBSITE,
   logoData: DEFAULT_COMPANY_LOGO,
   preview: DEFAULT_COMPANY_PREVIEW,
@@ -23,6 +24,8 @@ function isCompanySettings(value: unknown): value is CompanySettings {
     typeof value === "object" &&
     "companyName" in value &&
     typeof value.companyName === "string" &&
+    "address" in value &&
+    typeof value.address === "string" &&
     "website" in value &&
     typeof value.website === "string" &&
     "logoData" in value &&
@@ -114,7 +117,7 @@ export default function CompanyPage() {
       if (!response.ok) throw new Error(responseMessage(result, "Unable to save company settings."));
       if (!isCompanySettings(result)) throw new Error("Company settings response is invalid.");
       setSettings(result);
-      setMessage("Company settings saved. New cards will start with this logo; saved cards keep their own logo.");
+      setMessage("Company settings saved. New cards will use this address and logo by default.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save company settings.");
     } finally {
@@ -130,7 +133,7 @@ export default function CompanyPage() {
           <header className="mb-7">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700">Brand settings</p>
             <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Card branding</h1>
-            <p className="mt-1 text-sm text-slate-500">Manage company details and the logo copied to new cards. Saved cards keep their own logo.</p>
+            <p className="mt-1 text-sm text-slate-500">Manage company details and defaults for new cards.</p>
           </header>
 
           <form onSubmit={save} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
@@ -141,6 +144,21 @@ export default function CompanyPage() {
                   <Building2 size={17} className="shrink-0 text-slate-400" />
                   <input required maxLength={100} value={settings.companyName} onChange={(event) => setSettings((current) => ({ ...current, companyName: event.target.value }))} className="w-full bg-transparent px-3 py-3 text-sm outline-none" />
                 </div>
+              </label>
+
+              <label>
+                <span className="mb-2 block text-sm font-semibold text-slate-700">Company address</span>
+                <div className="flex items-start rounded-xl border border-slate-200 bg-slate-50 px-3 focus-within:border-blue-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-blue-500/10">
+                  <MapPin size={17} className="mt-3 shrink-0 text-slate-400" />
+                  <textarea
+                    maxLength={250}
+                    rows={3}
+                    value={settings.address}
+                    onChange={(event) => setSettings((current) => ({ ...current, address: event.target.value }))}
+                    className="w-full resize-y bg-transparent px-3 py-3 text-sm outline-none"
+                  />
+                </div>
+                <span className="mt-1 block text-xs text-slate-500">Used as the default address on new cards. You can change it on each card.</span>
               </label>
 
               <label>

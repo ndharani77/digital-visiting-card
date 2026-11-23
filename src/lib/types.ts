@@ -4,6 +4,7 @@ export type UserRole = "SUPER_ADMIN" | "COMPANY_ADMIN" | "EMPLOYEE";
 
 export type VisitingCard = {
   id: string;
+  publicSlug?: string;
   companyId?: string;
   employeeId?: string;
   branchId?: string;

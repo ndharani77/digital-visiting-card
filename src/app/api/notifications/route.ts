@@ -29,9 +29,24 @@ export async function GET() {
     }
     const accountEmails = new Map(state.users.map((account) => [account.id, account.email]));
     const companyNames = new Map(state.companies.map((company) => [company.id, company.name]));
+    const branchEntityIds = user.branchId
+      ? new Set([
+          ...state.employees
+            .filter((employee) => employee.companyId === companyId && employee.branchId === user.branchId)
+            .map((employee) => `employee:${employee.id}`),
+          ...state.cards
+            .filter((card) => card.companyId === companyId && card.branchId === user.branchId)
+            .map((card) => `card:${card.id}`),
+        ])
+      : null;
     const items = state.activityLogs
       .filter((log) =>
         (isSuperAdmin || log.companyId === companyId) &&
+        (!branchEntityIds || (
+          log.entityType === "branch"
+            ? log.entityId === user.branchId
+            : branchEntityIds.has(`${log.entityType}:${log.entityId}`)
+        )) &&
         log.actorUserId !== user.id &&
         (isSuperAdmin || preferences.notifications[notificationCategory(log.entityType)])
       )

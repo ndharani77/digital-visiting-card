@@ -261,7 +261,7 @@ export default function CompanySettingsPage() {
             <p className="mt-1 text-sm text-slate-500">{t("settings.subtitle")}</p>
           </header>
 
-          <section aria-labelledby="theme-heading" className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+          <section aria-labelledby="theme-heading" className="mx-auto mb-6 w-full max-w-6xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
             <div className="mb-8 grid gap-8 border-b border-slate-100 pb-8 lg:grid-cols-[minmax(0,1fr)_300px]">
               <div>
                 <h2 className="text-xl font-bold text-slate-950">{t("settings.dashboardBranding")}</h2>
@@ -396,7 +396,7 @@ export default function CompanySettingsPage() {
             </div>
           </section>
 
-          <section aria-labelledby="preferences-heading" className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+          <section aria-labelledby="preferences-heading" className="mx-auto mb-6 w-full max-w-6xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
             <div className="flex items-start gap-3">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
                 <MonitorCog size={21} />

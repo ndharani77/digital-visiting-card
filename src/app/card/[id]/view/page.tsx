@@ -6,6 +6,7 @@ import { Eye } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import QRCodeDownloads from "@/components/QRCodeDownloads";
 import type { VisitingCard } from "@/lib/types";
+import { getCardQrPath, getCardQrViewerPath } from "@/lib/card-slug";
 
 export default function VisitingCardPreviewPage({ params }: { params: Promise<{ id: string }> }) {
   const [card, setCard] = useState<VisitingCard | null>(null);
@@ -18,12 +19,17 @@ export default function VisitingCardPreviewPage({ params }: { params: Promise<{ 
 
   useEffect(() => {
     if (!id) return;
-    setQrUrl(`${window.location.origin}/card/${id}?source=qr`);
-    fetch(`/api/cards/${id}`)
+    fetch(`/api/cards/${encodeURIComponent(id)}`)
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || "Card not found.");
-        setCard(data as VisitingCard);
+        const loadedCard = data as VisitingCard;
+        setCard(loadedCard);
+        setQrUrl(`${window.location.origin}${getCardQrPath(loadedCard)}`);
+        const canonicalPath = getCardQrViewerPath(loadedCard);
+        if (window.location.pathname !== canonicalPath) {
+          window.history.replaceState(window.history.state, "", canonicalPath);
+        }
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Unable to load card."));
   }, [id]);

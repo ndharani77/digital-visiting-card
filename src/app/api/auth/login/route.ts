@@ -32,6 +32,7 @@ export async function POST(request: Request) {
         email: user.email,
         role: user.role,
         companyId: user.companyId,
+        branchId: user.branchId,
         employeeId: user.employeeId,
         mustChangePassword: user.mustChangePassword,
         locale: user.locale,

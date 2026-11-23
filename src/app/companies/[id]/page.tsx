@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, LoaderCircle, Save } from "lucide-react";
+import { ArrowLeft, GitBranch, LoaderCircle, Save } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import type { UserRole } from "@/lib/types";
 
@@ -39,8 +39,10 @@ export default function CompanyProfilePage() {
   const params = useParams<{ id: string }>();
   const companyId = params.id;
   const [company, setCompany] = useState<Company>(emptyCompany);
+  const [branchEnabled, setBranchEnabled] = useState(false);
   const [role, setRole] = useState<UserRole | null>(null);
   const [activeCompanyId, setActiveCompanyId] = useState<string | null>(null);
+  const [branchCount, setBranchCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -57,9 +59,20 @@ export default function CompanyProfilePage() {
     ]);
     if (!companyResponse.ok) throw new Error(companyResult.message || "Unable to load company details.");
     if (!sessionResponse.ok) throw new Error(session.message || "Unable to load account details.");
-    setCompany({ ...emptyCompany, ...companyResult });
+    const companyDetails = { ...emptyCompany, ...companyResult };
+    setCompany(companyDetails);
+    setBranchEnabled(companyDetails.branchEnabled === true);
     setRole(session.user.role);
     setActiveCompanyId(session.activeCompanyId);
+    if (session.user.role === "SUPER_ADMIN" && companyDetails.branchEnabled === true) {
+      const branchesResponse = await fetch(`/api/branches?companyId=${encodeURIComponent(companyId)}`);
+      const branches: unknown = await branchesResponse.json();
+      if (!branchesResponse.ok) throw new Error((branches as { message?: string }).message || "Unable to load company branches.");
+      if (!Array.isArray(branches)) throw new Error("Company branches response is invalid.");
+      setBranchCount(branches.length);
+    } else {
+      setBranchCount(0);
+    }
   }, [companyId]);
 
   useEffect(() => {
@@ -73,7 +86,7 @@ export default function CompanyProfilePage() {
     setSaving(true);
     setError("");
     setMessage("");
-    const { status, ...details } = company;
+    const { status, branchEnabled, ...details } = company;
     try {
       const response = await fetch(`/api/companies/${encodeURIComponent(companyId)}`, {
         method: "PUT",
@@ -108,6 +121,23 @@ export default function CompanyProfilePage() {
             <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">{company.name || "Company details"}</h1>
             <p className="mt-2 text-sm text-slate-500">Company information and contact details.</p>
           </header>
+
+          {role === "SUPER_ADMIN" && branchEnabled && (
+            <section aria-label="Company branch summary" className="mb-6 grid max-w-sm gap-3">
+              <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">Branches</p>
+                    <p className="mt-2 text-2xl font-bold tracking-tight text-slate-950">{branchCount}</p>
+                  </div>
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                    <GitBranch size={19} aria-hidden="true" />
+                  </span>
+                </div>
+                <p className="mt-3 text-xs text-slate-500">Branches in this company workspace</p>
+              </article>
+            </section>
+          )}
 
           {error && <p role="alert" className="mb-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
           {message && <p role="status" className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{message}</p>}

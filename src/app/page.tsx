@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   CirclePause,
   CreditCard,
+  GitBranch,
   Plus,
   QrCode,
   ShieldCheck,
@@ -18,9 +19,11 @@ import DashboardCardSearch from "@/components/DashboardCardSearch";
 import CompanyNotifications from "@/components/CompanyNotifications";
 import SuperAdminDashboard from "@/components/SuperAdminDashboard";
 import { getActiveCompanyId, requirePageUser } from "@/lib/auth";
+import { getCardQrPath } from "@/lib/card-slug";
 import {
   getActivityLogsForUser,
   getCardsForUser,
+  getCompany,
   getPlatformStatistics,
   listCompanies,
 } from "@/lib/platform-store";
@@ -34,6 +37,7 @@ type DashboardMetric = {
   detail: string;
   icon: LucideIcon;
   tone: "blue" | "green" | "amber" | "violet";
+  href?: string;
 };
 
 type DashboardAction = {
@@ -68,14 +72,15 @@ export default async function Dashboard() {
     );
   }
 
-  const [cards, companies] = await Promise.all([
+  const [cards, companies, branchWorkspace] = await Promise.all([
     getCardsForUser(user),
     listCompanies(user),
+    user.branchId ? getCompany(user) : Promise.resolve(null),
   ]);
   const analytics = user.role === "EMPLOYEE" ? null : await getPlatformStatistics(user);
   const company = user.role === "SUPER_ADMIN"
     ? companies.find((item) => item.id === activeCompanyId)
-    : companies[0];
+    : branchWorkspace ?? companies[0];
   const companyScopeCompanies = user.role === "SUPER_ADMIN" && activeCompanyId
     ? companies.filter((item) => item.id === activeCompanyId)
     : companies;
@@ -88,22 +93,24 @@ export default async function Dashboard() {
   const title = isPlatformWideView
     ? "Platform overview"
     : isCompanyAdmin
-      ? "Company dashboard"
+      ? user.branchId ? "Branch dashboard" : "Company dashboard"
       : "My card dashboard";
   const headline = isPlatformWideView
     ? "Your platform, at a glance."
     : isCompanyAdmin
-      ? "Your team’s digital presence, organized."
+      ? user.branchId ? "Your branch’s digital presence, organized." : "Your team’s digital presence, organized."
       : "Your professional card, ready to share.";
   const description = isPlatformWideView
     ? "Monitor company workspaces and keep card operations moving from one place."
     : isCompanyAdmin
-      ? "Manage your team’s cards, review their status, and keep company details up to date."
+      ? user.branchId
+        ? "Manage your branch’s cards, branding, and contact details."
+        : "Manage your team’s cards, review their status, and keep company details up to date."
       : "Keep your details current and share your digital card whenever you make a new connection.";
   const eyebrow = isPlatformWideView
     ? "Platform management"
     : isCompanyAdmin
-      ? "Company operations"
+      ? user.branchId ? "Branch operations" : "Company operations"
       : "Personal workspace";
   const heroContext = isPlatformWideView
     ? company?.name ?? "All companies"
@@ -126,13 +133,6 @@ export default async function Dashboard() {
           tone: "violet",
         },
         {
-          label: "Active QR codes",
-          value: analytics?.activeQrCodes ?? 0,
-          detail: "Available to visitors",
-          icon: QrCode,
-          tone: "blue",
-        },
-        {
           label: "Inactive cards",
           value: analytics?.inactiveCards ?? 0,
           detail: "Not currently available to visitors",
@@ -145,23 +145,28 @@ export default async function Dashboard() {
           {
             label: "Total cards",
             value: cards.length,
-            detail: "Cards managed by your company",
+            detail: user.branchId ? "Cards managed by your branch" : "Cards managed by your company",
             icon: CreditCard,
             tone: "violet",
+            href: "/my-cards",
           },
-          {
-            label: "Active QR codes",
-            value: analytics?.activeQrCodes ?? 0,
-            detail: "Available to visitors",
-            icon: QrCode,
-            tone: "blue",
-          },
+          ...(company?.branchEnabled && !user.branchId
+            ? [{
+                label: "Branches",
+                value: analytics?.branches ?? 0,
+                detail: "Company branches",
+                icon: GitBranch,
+                tone: "green" as const,
+                href: "/branches",
+              }]
+            : []),
           {
             label: "Active cards",
             value: activeCards.length,
             detail: "Available to visitors",
             icon: CheckCircle2,
             tone: "green",
+            href: "/my-cards",
           },
           {
             label: "Inactive cards",
@@ -169,6 +174,7 @@ export default async function Dashboard() {
             detail: "Not currently available to visitors",
             icon: CirclePause,
             tone: "amber",
+            href: "/my-cards",
           },
         ]
       : [
@@ -209,7 +215,7 @@ export default async function Dashboard() {
       : cards[0]
         ? [
             { href: `/create-card?id=${encodeURIComponent(cards[0].id)}`, label: "Update my card", icon: UserRound, primary: true },
-            { href: `/card/${encodeURIComponent(cards[0].id)}?source=qr`, label: "Preview and share", icon: ArrowUpRight },
+            { href: getCardQrPath(cards[0]), label: "Preview and share", icon: ArrowUpRight },
           ]
         : [];
 
@@ -234,7 +240,7 @@ export default async function Dashboard() {
               {user.role !== "EMPLOYEE" && <CompanyNotifications locale={user.locale} showCompany={user.role === "SUPER_ADMIN"} />}
               <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-600 shadow-sm">
                 {isPlatformWideView ? <ShieldCheck size={15} /> : isCompanyAdmin ? <Building2 size={15} /> : <UserRound size={15} />}
-                {roleLabels[dashboardRole]}
+                {user.branchId ? "Branch administrator" : roleLabels[dashboardRole]}
               </span>
             </div>
           </header>
@@ -282,25 +288,40 @@ export default async function Dashboard() {
           </section>
 
           <section aria-label="Workspace summary" className={`mb-8 grid gap-3 sm:grid-cols-2 ${metrics.length === 3 ? "xl:grid-cols-3" : metrics.length === 5 ? "xl:grid-cols-5" : "xl:grid-cols-4"}`}>
-            {metrics.map(({ label, value, detail, icon: Icon, tone }) => (
-              <article key={label} className="dashboard-stat-card rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-900/[0.02]">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-slate-500">{label}</p>
-                    <p className="mt-2 truncate text-2xl font-bold tracking-tight text-slate-950">{value}</p>
+            {metrics.map(({ label, value, detail, icon: Icon, tone, href }) => {
+              const content = (
+                <>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-slate-500">{label}</p>
+                      <p className="mt-2 truncate text-2xl font-bold tracking-tight text-slate-950">{value}</p>
+                    </div>
+                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                      tone === "green" ? "bg-emerald-50 text-emerald-700"
+                        : tone === "amber" ? "bg-amber-50 text-amber-700"
+                          : tone === "violet" ? "bg-violet-50 text-violet-700"
+                            : "bg-blue-50 text-blue-700"
+                    }`}>
+                      <Icon size={19} aria-hidden="true" />
+                    </span>
                   </div>
-                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-                    tone === "green" ? "bg-emerald-50 text-emerald-700"
-                      : tone === "amber" ? "bg-amber-50 text-amber-700"
-                        : tone === "violet" ? "bg-violet-50 text-violet-700"
-                          : "bg-blue-50 text-blue-700"
-                  }`}>
-                    <Icon size={19} aria-hidden="true" />
-                  </span>
-                </div>
-                <p className="mt-3 truncate text-xs text-slate-500">{detail}</p>
-              </article>
-            ))}
+                  <p className="mt-3 truncate text-xs text-slate-500">{detail}</p>
+                </>
+              );
+              const className = `dashboard-stat-card block rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-900/[0.02] ${
+                href ? "transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600" : ""
+              }`;
+
+              return href ? (
+                <Link key={label} href={href} className={className}>
+                  {content}
+                </Link>
+              ) : (
+                <article key={label} className={className}>
+                  {content}
+                </article>
+              );
+            })}
           </section>
 
           <DashboardCardSearch

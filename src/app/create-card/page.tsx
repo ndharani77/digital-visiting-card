@@ -26,7 +26,7 @@ const countryCodes = getCountries()
 
 const initialForm = {
   fullName: "", designation: "", company: DEFAULT_COMPANY, countryCode: "+91", mobile: "", email: "",
-  address: "", website: DEFAULT_WEBSITE, linkedin: "", linkedinName: "", logoData: DEFAULT_COMPANY_LOGO,
+  address: "", website: DEFAULT_WEBSITE, linkedin: "", linkedinName: "", logoData: DEFAULT_COMPANY_LOGO, branchId: "",
   backgroundColor: DEFAULT_CARD_BACKGROUND, accentColor: DEFAULT_CARD_ACCENT,
 };
 
@@ -73,6 +73,8 @@ export default function CreateCardPage() {
         const sessionResponse = await fetch("/api/auth/session");
         const session = await sessionResponse.json();
         if (!sessionResponse.ok) throw new Error(session.message || "Unable to load account details.");
+        const branchId = typeof session.user.branchId === "string" ? session.user.branchId : "";
+        if (branchId) setForm((current) => ({ ...current, branchId }));
         const settingsResponse = await fetch("/api/company");
         const settings = await settingsResponse.json();
         if (!settingsResponse.ok) throw new Error(settings.message || "Unable to load company settings.");
@@ -80,6 +82,7 @@ export default function CreateCardPage() {
         setForm((current) => ({
           ...current,
           company: settings.companyName,
+          address: settings.address || "",
           website: settings.website,
           logoData: settings.logoData,
         }));
@@ -104,6 +107,7 @@ export default function CreateCardPage() {
           logoData: result.logoData || settings.logoData,
           backgroundColor: result.backgroundColor || initialForm.backgroundColor,
           accentColor: result.accentColor || initialForm.accentColor,
+          branchId: result.branchId || "",
         });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to load card.");
@@ -124,7 +128,7 @@ export default function CreateCardPage() {
       value = value.replace(/\D/g, "").slice(0, 15);
     }
     setForm((current) => ({ ...current, [field]: value }));
-    if (field in fieldErrors) {
+    if (field !== "branchId" && field in fieldErrors) {
       setFieldErrors((current) => ({
         ...current,
         [field]: validateCardField(field, value),
@@ -182,7 +186,8 @@ export default function CreateCardPage() {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || "Unable to create card.");
-      window.location.href = `/card/${result.id}/view`;
+      const cardRouteId = typeof result.publicSlug === "string" ? result.publicSlug : result.id;
+      window.location.href = `/card/${encodeURIComponent(cardRouteId)}/view`;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
       setLoading(false);
@@ -205,15 +210,21 @@ export default function CreateCardPage() {
     <div className="flex min-h-screen flex-col md:flex-row">
       <Sidebar />
       <main className="min-w-0 flex-1 p-5 md:p-8 xl:p-10">
-        <div className="mb-7">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700">Card setup</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">{editingId ? "Edit card details" : "Create a digital card"}</h1>
-          <p className="mt-2 text-sm text-slate-500">{editingId ? "Update the contact details shown on this card." : "Enter contact details to create a digital card and QR code."}</p>
-        </div>
-        <div className="mx-auto max-w-4xl">
-          <form noValidate onSubmit={submit} className="create-card-form rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+        <div className="create-card-shell mx-auto w-full max-w-4xl">
+          <header className="mb-7">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700">Card setup</p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">{editingId ? "Edit card details" : "Create a digital card"}</h1>
+            <p className="mt-2 text-sm text-slate-500">{editingId ? "Update the contact details shown on this card." : "Enter contact details to create a digital card and QR code."}</p>
+          </header>
+          <form noValidate onSubmit={submit} className="create-card-form rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_12px_36px_rgba(15,23,42,0.06)] sm:p-6 md:p-8">
             {loadingCard && <p role="status" className="mb-5 rounded-lg bg-blue-50 p-3 text-sm text-blue-700">Loading card details...</p>}
-            <div className="mb-6"><h2 className="text-lg font-bold">Personal & professional information</h2><p className="mt-1 text-sm text-slate-500">Fields marked with * are required.</p></div>
+            <div className="mb-6 flex items-start gap-3 border-b border-slate-100 pb-5">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700"><UserRound size={19} /></span>
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Personal & professional information</h2>
+                <p className="mt-1 text-sm text-slate-500">Fields marked with <span className="font-semibold text-red-500">*</span> are required.</p>
+              </div>
+            </div>
             <div className="grid gap-5 sm:grid-cols-2">
               {fields.map((field) => {
                 if (field.key === "mobile") {

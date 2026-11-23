@@ -4,7 +4,6 @@ import { requireUser } from "@/lib/auth";
 import {
   isCompanyPreviewSettings,
   mergeCardPreviewWithCompanyDefaults,
-  stripDefaultServicesFromCardPreview,
 } from "@/lib/company-content";
 import {
   getCardForUser,
@@ -28,7 +27,6 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     return NextResponse.json({
       preview,
       isCustom: card.preview !== undefined,
-      defaultServiceIds: settings.preview.services.items.map((service) => service.id),
     });
   } catch (error) {
     const authResponse = authFailureResponse(error);
@@ -60,13 +58,12 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     const existingCard = await getCardForUser(user, id);
     if (!existingCard) return NextResponse.json({ message: "Visiting card not found." }, { status: 404 });
     const settings = await getCompanySettings(user, existingCard.companyId);
-    const cardPreview = stripDefaultServicesFromCardPreview(settings.preview, body.preview);
+    const cardPreview = { ...body.preview, cardServicesOverride: true };
     const card = await setCardPreviewForUser(user, id, cardPreview);
     if (!card) return NextResponse.json({ message: "Visiting card not found." }, { status: 404 });
     return NextResponse.json({
       preview: mergeCardPreviewWithCompanyDefaults(settings.preview, card.preview),
       isCustom: true,
-      defaultServiceIds: settings.preview.services.items.map((service) => service.id),
     });
   } catch (error) {
     const authResponse = authFailureResponse(error);
@@ -86,7 +83,6 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
     return NextResponse.json({
       preview: settings.preview,
       isCustom: false,
-      defaultServiceIds: settings.preview.services.items.map((service) => service.id),
     });
   } catch (error) {
     const authResponse = authFailureResponse(error);

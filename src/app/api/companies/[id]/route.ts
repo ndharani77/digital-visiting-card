@@ -34,6 +34,10 @@ function parseCompanyUpdate(value: unknown): Partial<CompanyInput> | string {
     if (data.status !== "active" && data.status !== "inactive") return "Company status is invalid.";
     result.status = data.status;
   }
+  if (data.branchEnabled !== undefined) {
+    if (typeof data.branchEnabled !== "boolean") return "Choose Yes or No for branch management.";
+    result.branchEnabled = data.branchEnabled;
+  }
   return result;
 }
 
@@ -75,6 +79,9 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   if (typeof input === "string") return NextResponse.json({ message: input }, { status: 400 });
   if (user.role !== "SUPER_ADMIN" && input.status !== undefined) {
     return NextResponse.json({ message: "Only Super Admins can change company status." }, { status: 403 });
+  }
+  if (user.role !== "SUPER_ADMIN" && input.branchEnabled !== undefined) {
+    return NextResponse.json({ message: "Only Super Admins can change branch management." }, { status: 403 });
   }
 
   try {

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { authFailureResponse } from "@/lib/api-auth";
 import { requireUser } from "@/lib/auth";
 import { validateCardFields } from "@/lib/card-validation";
-import {  getCompanySettings, getCardsForUser, createCardForUser } from "@/lib/platform-store";
+import { getCompanySettings, getCardsForUser, createCardForUser, listBranches, getCompany } from "@/lib/platform-store";
 import { DEFAULT_CARD_ACCENT, DEFAULT_CARD_BACKGROUND } from "@/lib/card-defaults";
 
 export const runtime = "nodejs";
@@ -43,14 +43,15 @@ export async function POST(request: Request) {
     if ("companyId" in data) {
       return NextResponse.json({ message: "Company is determined by the active workspace." }, { status: 400 });
     }
-    if ("branchId" in data) {
-      return NextResponse.json({ message: "Branches are not supported." }, { status: 400 });
-    }
+    const branchId = typeof data.branchId === "string" && data.branchId.trim() ? data.branchId.trim() : null;
+    const activeCompany = await getCompany(user);
+    const branch = branchId && activeCompany ? (await listBranches(user, activeCompany.id)).find((item) => item.id === branchId) : null;
     if (data.countryCode === undefined) data.countryCode = "+91";
     const settings = await getCompanySettings(user);
-    data.company = settings.companyName;
-    if (!("logoData" in data)) data.logoData = settings.logoData;
-    data.website = settings.website;
+    data.company = branch?.name ?? settings.companyName;
+    if (data.address === undefined) data.address = branch?.address || settings.address;
+    if (!("logoData" in data)) data.logoData = branch?.logoData || settings.logoData;
+    data.website = branch?.website || settings.website;
     const errors = validateCardFields(data);
     if (Object.keys(errors).length > 0) {
       const message = Object.values(errors)[0];
@@ -62,17 +63,18 @@ export async function POST(request: Request) {
     const card = await createCardForUser(user, {
       fullName: String(data.fullName).trim(),
       designation: String(data.designation).trim(),
-      company: settings.companyName,
+      company: branch?.name ?? settings.companyName,
       countryCode: String(data.countryCode).trim(),
       mobile: String(data.mobile).trim(),
       email: String(data.email).trim(),
       address: optionalText("address"),
-      website: settings.website,
+      website: branch?.website || settings.website,
       linkedin: optionalText("linkedin"),
       linkedinName: optionalText("linkedinName"),
       logoData: String(data.logoData),
       backgroundColor: DEFAULT_CARD_BACKGROUND,
       accentColor: DEFAULT_CARD_ACCENT,
+      branchId,
     });
     return NextResponse.json(card, { status: 201 });
   } catch (error) {

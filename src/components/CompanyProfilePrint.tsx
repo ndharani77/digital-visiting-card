@@ -1,6 +1,7 @@
 import Image from "next/image";
 import type { ReactNode } from "react";
 import {
+  getCompanyCustomTabFieldContent,
   getCompanyPreviewTabOrder,
   isCompanyPreviewTabHidden,
   type CompanyPreviewSettings,
@@ -76,21 +77,18 @@ export default function CompanyProfilePrint({ preview }: { preview: CompanyPrevi
         <header className="border-b border-slate-200 pb-5">
           <h2 className="company-brand-text text-3xl font-bold tracking-tight">{tab.title}</h2>
         </header>
-        {tab.fields.map((field) => (
-          <div key={field.id}>
-            {field.type === "service" && (field.title || field.description || field.image) && (
-              <article className="space-y-4 rounded-xl border border-slate-200 p-5">
-                {field.title && <h3 className="company-brand-text text-xl font-semibold">{field.title}</h3>}
-                {field.image && <Image src={field.image} alt={field.title ?? ""} width={1400} height={800} unoptimized className="max-h-[360px] w-full rounded-2xl object-cover" />}
-                {field.description && <p className="whitespace-pre-line text-justify text-base leading-7 text-slate-700">{field.description}</p>}
-                {field.href && <p className="company-brand-text break-all text-sm">{field.href}</p>}
-              </article>
-            )}
-            {field.type === "heading" && field.content && <h3 className="company-brand-text text-xl font-semibold">{field.content}</h3>}
-            {field.type === "text" && field.content && <p className="whitespace-pre-line text-justify text-base leading-7 text-slate-700">{field.content}</p>}
-            {field.type === "image" && field.content && <Image src={field.content} alt={tab.title} width={1400} height={800} unoptimized className="max-h-[360px] w-full rounded-2xl object-cover" />}
-          </div>
-        ))}
+        {tab.fields.map((field) => {
+          const { heading, description, image } = getCompanyCustomTabFieldContent(field);
+          if (!heading && !description && !image) return null;
+          return (
+            <article key={field.id} className="space-y-4 rounded-xl border border-slate-200 p-5">
+              {heading && <h3 className="company-brand-text text-xl font-semibold">{heading}</h3>}
+              {image && <Image src={image} alt={heading || tab.title} width={1400} height={800} unoptimized className="max-h-[360px] w-full rounded-2xl object-cover" />}
+              {description && <p className="whitespace-pre-line text-justify text-base leading-7 text-slate-700">{description}</p>}
+              {field.type === "service" && field.href && <p className="company-brand-text break-all text-sm">{field.href}</p>}
+            </article>
+          );
+        })}
       </section>,
     ];
   }

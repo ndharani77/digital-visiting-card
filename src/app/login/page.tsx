@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { CreditCard, LoaderCircle, LockKeyhole, Mail } from "lucide-react";
+import { CreditCard, Eye, EyeOff, LoaderCircle, LockKeyhole, Mail } from "lucide-react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [authConfigurationMissing, setAuthConfigurationMissing] = useState(false);
@@ -82,13 +83,22 @@ export default function LoginPage() {
             <span className="mt-2 flex items-center gap-3 rounded-xl border border-slate-300 px-3.5 py-3 focus-within:border-blue-600">
               <LockKeyhole size={18} className="text-slate-400" />
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 autoComplete="current-password"
                 required
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 className="w-full bg-transparent text-sm outline-none"
               />
+              <button
+                type="button"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                title={showPassword ? "Hide password" : "Show password"}
+                onClick={() => setShowPassword((visible) => !visible)}
+                className="shrink-0 rounded-md p-1 text-slate-400 hover:text-slate-700"
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </span>
           </label>
           <button

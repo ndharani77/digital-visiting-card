@@ -43,6 +43,14 @@ export type CompanyCustomTab = {
   fields: CompanyCustomTabField[];
 };
 
+export function getCompanyCustomTabFieldContent(field: CompanyCustomTabField) {
+  return {
+    heading: field.type === "heading" ? field.content : field.title ?? "",
+    description: field.type === "text" ? field.content : field.description ?? "",
+    image: field.type === "image" ? field.content : field.image ?? "",
+  };
+}
+
 export type CompanyPreviewSettings = {
   whatsappMessage: string;
   labels: {
@@ -64,6 +72,7 @@ export type CompanyPreviewSettings = {
   tabOrder?: string[];
   hiddenTabs?: string[];
   customTabs?: CompanyCustomTab[];
+  cardServicesOverride?: boolean;
   about: {
     kicker: string;
     title: string;
@@ -223,30 +232,14 @@ export function mergeCardPreviewWithCompanyDefaults(
     tabs: {
       ...companyPreview.tabs,
       ...cardPreview.tabs,
-      services: companyPreview.tabs.services,
     },
-    hiddenTabs: [...new Set([
-      ...(companyPreview.hiddenTabs ?? []),
-      ...(cardPreview.hiddenTabs ?? []),
-    ])],
-    services: {
-      ...companyPreview.services,
-      items: [...companyPreview.services.items, ...cardServices],
-    },
-  };
-}
-
-export function stripDefaultServicesFromCardPreview(
-  companyPreview: CompanyPreviewSettings,
-  cardPreview: CompanyPreviewSettings
-): CompanyPreviewSettings {
-  const defaultServiceIds = new Set(companyPreview.services.items.map((service) => service.id));
-  return {
-    ...cardPreview,
-    services: {
-      ...cardPreview.services,
-      items: cardPreview.services.items.filter((service) => !defaultServiceIds.has(service.id)),
-    },
+    hiddenTabs: cardPreview.hiddenTabs ?? companyPreview.hiddenTabs,
+    services: cardPreview.cardServicesOverride
+      ? cardPreview.services
+      : {
+          ...companyPreview.services,
+          items: [...companyPreview.services.items, ...cardServices],
+        },
   };
 }
 
@@ -284,6 +277,14 @@ function isImageSource(value: unknown) {
   }
 }
 
+function isOptionalText(value: unknown, maxLength: number) {
+  return value === undefined || isText(value, maxLength);
+}
+
+function isOptionalImageSource(value: unknown) {
+  return value === undefined || isImageSource(value);
+}
+
 function isLink(value: unknown) {
   if (value === "") return true;
   if (typeof value !== "string" || value.length > 2048) return false;
@@ -297,6 +298,7 @@ function isLink(value: unknown) {
 
 export function isCompanyPreviewSettings(value: unknown): value is CompanyPreviewSettings {
   if (!isRecord(value) || !isRecord(value.labels) || !isRecord(value.tabs) || !isRecord(value.about) || !isRecord(value.services) || !isRecord(value.enquiry)) return false;
+  if (value.cardServicesOverride !== undefined && typeof value.cardServicesOverride !== "boolean") return false;
   const customTabs = value.customTabs;
   if (customTabs !== undefined && (
     !Array.isArray(customTabs) ||
@@ -311,13 +313,19 @@ export function isCompanyPreviewSettings(value: unknown): value is CompanyPrevie
         isRecord(field) &&
         /^[\w-]{1,100}$/.test(typeof field.id === "string" ? field.id : "") &&
         (field.type === "heading" || field.type === "text" || field.type === "image" || field.type === "service") &&
+        isOptionalText(field.title, 200) &&
+        isOptionalText(field.description, 10_000) &&
+        isOptionalText(field.href, 2048) &&
+        isOptionalImageSource(field.image) &&
         (field.type === "heading" ? isText(field.content, 200) :
           field.type === "text" ? isText(field.content, 10_000) :
             field.type === "image" ? isImageSource(field.content) :
-              isText(field.title, 200) &&
-              isLink(field.href) &&
-              isText(field.description, 10_000) &&
-              isImageSource(field.image))
+              (field.content === undefined || isText(field.content, 10_000)) &&
+              isOptionalText(field.title, 200) &&
+              isOptionalText(field.href, 2048) &&
+              isLink(typeof field.href === "string" ? field.href : "") &&
+              isOptionalText(field.description, 10_000) &&
+              isOptionalImageSource(field.image))
       ) &&
       new Set(tab.fields.map((field) => isRecord(field) ? field.id : "")).size === tab.fields.length
     )

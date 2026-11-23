@@ -31,6 +31,7 @@ export async function GET() {
     const admins = state.users
       .filter((account) =>
         account.role === "COMPANY_ADMIN" &&
+        !account.branchId &&
         (!activeCompanyId || account.companyId === activeCompanyId)
       )
       .sort((left, right) => left.email.localeCompare(right.email))
@@ -174,7 +175,9 @@ export async function PATCH(request: Request) {
   try {
     const passwordHash = password ? await hash(password, 12) : undefined;
     const result = await updateJsonPlatform(async (state) => {
-      const account = state.users.find((item) => item.id === userId && item.role === "COMPANY_ADMIN");
+      const account = state.users.find((item) =>
+        item.id === userId && item.role === "COMPANY_ADMIN" && !item.branchId
+      );
       if (!account || !account.companyId) return { kind: "not-found" as const };
       if (activeCompanyId && activeCompanyId !== account.companyId) return { kind: "forbidden" as const };
       const nextCompanyId = companyId ?? account.companyId;
@@ -189,7 +192,8 @@ export async function PATCH(request: Request) {
       }
       if (account.status === "active" && (nextStatus !== "active" || nextCompanyId !== account.companyId) &&
           state.users.filter((item) =>
-        item.role === "COMPANY_ADMIN" && item.companyId === account.companyId && item.status === "active"
+        item.role === "COMPANY_ADMIN" && !item.branchId &&
+        item.companyId === account.companyId && item.status === "active"
       ).length <= 1) return { kind: "last-admin" as const };
       const originalCompanyId = account.companyId;
       const originalStatus = account.status;
@@ -241,13 +245,16 @@ export async function DELETE(request: Request) {
   const activeCompanyId = await getActiveCompanyId(user);
   try {
     const result = await updateJsonPlatform((state) => {
-      const accountIndex = state.users.findIndex((item) => item.id === userId && item.role === "COMPANY_ADMIN");
+      const accountIndex = state.users.findIndex((item) =>
+        item.id === userId && item.role === "COMPANY_ADMIN" && !item.branchId
+      );
       if (accountIndex === -1) return { kind: "not-found" as const };
       const account = state.users[accountIndex];
       if (!account.companyId) return { kind: "not-found" as const };
       if (activeCompanyId && activeCompanyId !== account.companyId) return { kind: "forbidden" as const };
       if (account.status === "active" && state.users.filter((item) =>
-        item.role === "COMPANY_ADMIN" && item.companyId === account.companyId && item.status === "active"
+        item.role === "COMPANY_ADMIN" && !item.branchId &&
+        item.companyId === account.companyId && item.status === "active"
       ).length <= 1) return { kind: "last-admin" as const };
       recordActivity(state, user, account.companyId, "deleted", "company-admin", account.id);
       state.users.splice(accountIndex, 1);

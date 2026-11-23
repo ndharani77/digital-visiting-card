@@ -19,6 +19,7 @@ export type AuthUser = {
   email: string;
   role: UserRole;
   companyId: string | null;
+  branchId: string | null;
   employeeId: string | null;
   mustChangePassword: boolean;
   locale: AppLocale;
@@ -78,7 +79,11 @@ export async function authenticateUser(email: string, password: string): Promise
     const account = state.users.find((item) =>
       item.email.toLowerCase() === email.trim().toLowerCase() &&
       item.status === "active" &&
-      (!item.companyId || state.companies.some((company) => company.id === item.companyId && company.status === "active"))
+      (!item.companyId || state.companies.some((company) => company.id === item.companyId && company.status === "active")) &&
+      (!item.branchId || state.branches.some((branch) =>
+        branch.id === item.branchId && branch.companyId === item.companyId && branch.status === "active" &&
+        state.companies.some((company) => company.id === branch.companyId && company.branchEnabled)
+      ))
     );
     if (!account || !(await compare(password, account.passwordHash))) return null;
     return {
@@ -86,6 +91,7 @@ export async function authenticateUser(email: string, password: string): Promise
       email: account.email,
       role: account.role,
       companyId: account.companyId,
+      branchId: account.branchId ?? null,
       employeeId: account.employeeId,
       mustChangePassword: account.mustChangePassword,
       locale: normalizeUserPreferences(account.preferences).locale,
@@ -110,6 +116,7 @@ export async function authenticateUser(email: string, password: string): Promise
     email: record.email,
     role: record.role,
     companyId: record.company_id,
+    branchId: null,
     employeeId: record.employee_id,
     mustChangePassword: record.must_change_password,
     locale: DEFAULT_USER_PREFERENCES.locale,
@@ -123,6 +130,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       email: "developer@localhost",
       role: "SUPER_ADMIN",
       companyId: null,
+      branchId: null,
       employeeId: null,
       mustChangePassword: false,
       locale: DEFAULT_USER_PREFERENCES.locale,
@@ -147,7 +155,11 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     const account = state.users.find((item) =>
       item.id === subject &&
       item.status === "active" &&
-      (!item.companyId || state.companies.some((company) => company.id === item.companyId && company.status === "active"))
+      (!item.companyId || state.companies.some((company) => company.id === item.companyId && company.status === "active")) &&
+      (!item.branchId || state.branches.some((branch) =>
+        branch.id === item.branchId && branch.companyId === item.companyId && branch.status === "active" &&
+        state.companies.some((company) => company.id === branch.companyId && company.branchEnabled)
+      ))
     );
     if (!account) return null;
     return {
@@ -155,6 +167,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       email: account.email,
       role: account.role,
       companyId: account.companyId,
+      branchId: account.branchId ?? null,
       employeeId: account.employeeId,
       mustChangePassword: account.mustChangePassword,
       locale: normalizeUserPreferences(account.preferences).locale,
@@ -178,6 +191,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     email: record.email,
     role: record.role,
     companyId: record.company_id,
+    branchId: null,
     employeeId: record.employee_id,
     mustChangePassword: record.must_change_password,
     locale: DEFAULT_USER_PREFERENCES.locale,
@@ -211,12 +225,16 @@ export async function getActiveCompanyId(user: AuthUser): Promise<string | null>
 
 export function canManageCompany(user: AuthUser, companyId: string): boolean {
   return user.role === "SUPER_ADMIN" || (
-    user.role === "COMPANY_ADMIN" && user.companyId === companyId
+    user.role === "COMPANY_ADMIN" && !user.branchId && user.companyId === companyId
   );
 }
 
 export function canViewCompany(user: AuthUser, companyId: string): boolean {
   return user.role === "SUPER_ADMIN" || user.companyId === companyId;
+}
+
+export function isBranchAdmin(user: AuthUser): boolean {
+  return user.role === "COMPANY_ADMIN" && user.branchId !== null;
 }
 
 export async function canAccessActiveCompany(user: AuthUser, companyId: string): Promise<boolean> {
@@ -225,14 +243,17 @@ export async function canAccessActiveCompany(user: AuthUser, companyId: string):
   return !activeCompanyId || activeCompanyId === companyId;
 }
 
-export function canManageCard(user: AuthUser, companyId: string, employeeId: string): boolean {
+export function canManageCard(user: AuthUser, companyId: string, employeeId: string, branchId?: string | null): boolean {
   if (user.role === "SUPER_ADMIN") return true;
   if (user.companyId !== companyId) return false;
-  return user.role === "COMPANY_ADMIN" || user.employeeId === employeeId;
+  if (user.role === "COMPANY_ADMIN") {
+    return !user.branchId || user.branchId === branchId;
+  }
+  return user.employeeId === employeeId;
 }
 
-export function canAccessCard(user: AuthUser, companyId: string, employeeId: string): boolean {
-  return canManageCard(user, companyId, employeeId);
+export function canAccessCard(user: AuthUser, companyId: string, employeeId: string, branchId?: string | null): boolean {
+  return canManageCard(user, companyId, employeeId, branchId);
 }
 
 export function requireCompanyAdmin(user: AuthUser): void {

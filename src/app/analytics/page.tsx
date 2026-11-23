@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 
 const summaryLabels = [
   { key: "companies", label: "Companies" },
+  { key: "branches", label: "Branches" },
   { key: "cards", label: "Visiting cards" },
   { key: "activeQrCodes", label: "Active QR codes" },
 ] as const;
@@ -31,7 +32,7 @@ export default async function AnalyticsPage() {
             <p className="mt-2 text-sm text-slate-500">{platformWide ? "Statistics across your company workspaces." : "Statistics scoped to your company."}</p>
           </header>
 
-          <section aria-label="Summary analytics" className="mb-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <section aria-label="Summary analytics" className="mb-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {summaryLabels.map(({ key, label }) => (
               <article key={key} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <p className="text-sm font-medium text-slate-500">{label}</p>
@@ -49,6 +50,7 @@ export default async function AnalyticsPage() {
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                   <tr>
                     {platformWide && <th className="px-5 py-3 font-semibold">Company</th>}
+                    <th className="px-5 py-3 font-semibold">Branches</th>
                     <th className="px-5 py-3 font-semibold">Status</th>
                     <th className="px-5 py-3 font-semibold">Cards</th>
                     <th className="px-5 py-3 font-semibold">Active cards</th>
@@ -59,6 +61,17 @@ export default async function AnalyticsPage() {
                   {analytics.byCompany.map((company) => (
                     <tr key={company.companyId}>
                       {platformWide && <td className="px-5 py-4 font-semibold text-slate-900">{company.companyName}</td>}
+                      <td className="px-5 py-4 text-slate-700">
+                        {company.branchDetails.length === 0 ? "None" : (
+                          <div className="space-y-1">
+                            {company.branchDetails.map((branch) => (
+                              <p key={branch.branchId} className="text-xs">
+                                <span className="font-semibold">{branch.branchName}</span>: {branch.cards} cards
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </td>
                       <td className="px-5 py-4 capitalize text-slate-700">{company.companyStatus}</td>
                       <td className="px-5 py-4 text-slate-700">{company.cards}</td>
                       <td className="px-5 py-4 text-slate-700">{company.activeCards}</td>

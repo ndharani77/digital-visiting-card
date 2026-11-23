@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { validateCardFields } from "@/lib/card-validation";
 import {
   deleteCardForUser,
+  getCardsForUser,
   getCardForUser,
   getCompanySettings,
   setCardActiveForUser,
@@ -16,7 +17,8 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   try {
     const user = await requireUser();
     const { id } = await context.params;
-    const card = await getCardForUser(user, id);
+    const card = await getCardForUser(user, id) ??
+      (await getCardsForUser(user)).find((item) => item.publicSlug === id) ?? null;
     if (!card) return NextResponse.json({ message: "Visiting card not found." }, { status: 404 });
     return NextResponse.json(card);
   } catch (error) {
@@ -51,9 +53,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     if (!current) return NextResponse.json({ message: "Visiting card not found." }, { status: 404 });
     const settings = await getCompanySettings(user, current.companyId);
     const data = body as Record<string, unknown>;
-    if ("branchId" in data) {
-      return NextResponse.json({ message: "Branches are not supported." }, { status: 400 });
-    }
+    const branchId = typeof data.branchId === "string" ? data.branchId.trim() || null : undefined;
     if (data.countryCode === undefined) data.countryCode = "+91";
     data.company = settings.companyName;
     if (!("logoData" in data)) data.logoData = current.logoData ?? settings.logoData;
@@ -75,6 +75,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       linkedin: optionalText("linkedin"),
       linkedinName: optionalText("linkedinName"),
       logoData: String(data.logoData),
+      branchId,
     });
     if (!card) return NextResponse.json({ message: "Visiting card not found." }, { status: 404 });
     return NextResponse.json(card);

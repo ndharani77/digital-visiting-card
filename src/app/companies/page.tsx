@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { ArrowRight, Building2, CirclePlus, LoaderCircle, Save, Search, X } from "lucide-react";
+import Link from "next/link";
+import { Building2, CirclePlus, LoaderCircle, Save, Search, X } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import CompanyAdminsManager from "@/components/CompanyAdminsManager";
 import type { UserRole } from "@/lib/types";
@@ -12,6 +13,7 @@ type Company = {
   email: string;
   website: string;
   status: "active" | "inactive";
+  branchEnabled: boolean;
 };
 
 type CompanyProfile = Company & {
@@ -60,6 +62,14 @@ export default function CompaniesPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [website, setWebsite] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [country, setCountry] = useState("");
+  const [description, setDescription] = useState("");
+  const [status, setStatus] = useState<"active" | "inactive">("active");
+  const [branchEnabled, setBranchEnabled] = useState(false);
 
   async function loadCompanies() {
     const [sessionResponse, companiesResponse] = await Promise.all([
@@ -109,6 +119,14 @@ export default function CompaniesPage() {
         setWebsite("");
         setAdminEmail("");
         setAdminPassword("");
+        setPhone("");
+        setAddress("");
+        setCity("");
+        setState("");
+        setCountry("");
+        setDescription("");
+        setStatus("active");
+        setBranchEnabled(false);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
@@ -148,6 +166,14 @@ export default function CompaniesPage() {
     setWebsite("");
     setAdminEmail("");
     setAdminPassword("");
+    setPhone("");
+    setAddress("");
+    setCity("");
+    setState("");
+    setCountry("");
+    setDescription("");
+    setStatus("active");
+    setBranchEnabled(false);
   }
 
   function closeCompanyProfile() {
@@ -181,6 +207,7 @@ export default function CompaniesPage() {
         country: result.country,
         description: result.description,
         status: result.status,
+        branchEnabled: result.branchEnabled === true,
       });
     } catch (loadError) {
       setProfileError(loadError instanceof Error ? loadError.message : "Unable to load company details.");
@@ -197,7 +224,10 @@ export default function CompaniesPage() {
   }, [openCompanyProfile]);
 
   function updateProfile(field: keyof CompanyProfile, value: string) {
-    setProfileCompany((current) => current ? { ...current, [field]: value } : current);
+    setProfileCompany((current) => current ? ({
+      ...current,
+      [field]: field === "branchEnabled" ? value === "true" : value,
+    }) : current);
   }
 
   async function saveCompanyProfile(event: FormEvent<HTMLFormElement>) {
@@ -240,7 +270,21 @@ export default function CompaniesPage() {
       const response = await fetch("/api/companies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, website, adminEmail, adminPassword }),
+        body: JSON.stringify({
+          name,
+          email,
+          phone,
+          website,
+          address,
+          city,
+          state,
+          country,
+          description,
+          status,
+          branchEnabled,
+          adminEmail,
+          adminPassword,
+        }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || "Unable to create company.");
@@ -249,6 +293,14 @@ export default function CompaniesPage() {
       setWebsite("");
       setAdminEmail("");
       setAdminPassword("");
+      setPhone("");
+      setAddress("");
+      setCity("");
+      setState("");
+      setCountry("");
+      setDescription("");
+      setStatus("active");
+      setBranchEnabled(false);
       setCreateFormOpen(false);
       clearDashboardQueryParameter("createCompany");
       setMessage(`${result.name} and its Company Admin account were created.`);
@@ -262,22 +314,6 @@ export default function CompaniesPage() {
       await loadCompanies();
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to refresh companies.");
-    }
-  }
-
-  async function selectCompany(companyId: string) {
-    setError("");
-    try {
-      const response = await fetch("/api/auth/active-company", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.message || "Unable to switch companies.");
-      window.location.assign("/");
-    } catch (switchError) {
-      setError(switchError instanceof Error ? switchError.message : "Unable to switch companies.");
     }
   }
 
@@ -390,8 +426,16 @@ export default function CompaniesPage() {
             ) : (
               <div className="grid gap-4 md:grid-cols-2">
                 {filteredCompanies.map((company) => (
-                  <article key={company.id} className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <div className="flex items-start justify-between gap-4">
+                  <article
+                    key={company.id}
+                    className="group relative min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:border-slate-300 hover:shadow-md"
+                  >
+                    <Link
+                      href={`/my-cards?companyId=${encodeURIComponent(company.id)}`}
+                      aria-label={`View ${company.name} visiting cards`}
+                      className="absolute inset-0 z-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600"
+                    />
+                    <div className="pointer-events-none relative z-10 flex items-start justify-between gap-4">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <Building2 size={18} className="shrink-0 text-blue-700" />
@@ -408,24 +452,27 @@ export default function CompaniesPage() {
                         {company.status === "active" ? "Active" : "Inactive"}
                       </span>
                     </div>
-                    <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
-                      <button type="button" onClick={() => void openCompanyProfile(company.id)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                        Company profile<ArrowRight size={15} />
+                    <div className="pointer-events-none relative z-10 mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+                      <button
+                        type="button"
+                        disabled={profileLoading && selectedCompanyId === company.id}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void openCompanyProfile(company.id);
+                        }}
+                        className="pointer-events-auto rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        Profile
                       </button>
-                      {role === "SUPER_ADMIN" && activeCompanyId !== company.id && (
-                        <button type="button" onClick={() => void selectCompany(company.id)} className="rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100">
-                          Switch to company
-                        </button>
-                      )}
-                      {role === "SUPER_ADMIN" && activeCompanyId === company.id && (
-                        <span className="rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700">Selected workspace</span>
-                      )}
                       {role === "SUPER_ADMIN" && (
                         <button
                           type="button"
                           disabled={updatingCompanyId === company.id}
-                          onClick={() => void toggleCompanyStatus(company)}
-                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void toggleCompanyStatus(company);
+                          }}
+                          className="pointer-events-auto rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                         >
                           {updatingCompanyId === company.id ? "Updating..." : company.status === "active" ? "Deactivate" : "Activate"}
                         </button>
@@ -470,63 +517,80 @@ export default function CompaniesPage() {
             </header>
             <form onSubmit={createCompany} className="flex flex-1 flex-col">
               <div className="flex-1 space-y-5 px-5 py-6 sm:px-7">
-                <p className="text-sm leading-6 text-slate-600">Companies are independent workspaces. Create the first Company Admin account at the same time.</p>
-                <label className="block text-sm font-medium text-slate-700">
-                  Company name
-                  <input
-                    autoFocus
-                    required
-                    maxLength={160}
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    className="mt-2 w-full rounded-xl border border-slate-300 px-3.5 py-3 outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10"
-                  />
-                </label>
-                <label className="block text-sm font-medium text-slate-700">
-                  Company Admin email
-                  <input
-                    type="email"
-                    autoComplete="username"
-                    required
-                    value={adminEmail}
-                    onChange={(event) => setAdminEmail(event.target.value)}
-                    className="mt-2 w-full rounded-xl border border-slate-300 px-3.5 py-3 outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10"
-                  />
-                </label>
-                <label className="block text-sm font-medium text-slate-700">
-                  Company Admin password
-                  <input
-                    type="password"
-                    autoComplete="new-password"
-                    required
-                    minLength={14}
-                    maxLength={72}
-                    value={adminPassword}
-                    onChange={(event) => setAdminPassword(event.target.value)}
-                    placeholder="At least 14 characters"
-                    className="mt-2 w-full rounded-xl border border-slate-300 px-3.5 py-3 outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10"
-                  />
-                  <span className="mt-1 block text-xs font-normal text-slate-500">Use at least 14 characters. The password is stored securely as a hash.</span>
-                </label>
-                <label className="block text-sm font-medium text-slate-700">
-                  Company email
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    className="mt-2 w-full rounded-xl border border-slate-300 px-3.5 py-3 outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10"
-                  />
-                </label>
-                <label className="block text-sm font-medium text-slate-700">
-                  Website
-                  <input
-                    type="url"
-                    value={website}
-                    onChange={(event) => setWebsite(event.target.value)}
-                    placeholder="https://"
-                    className="mt-2 w-full rounded-xl border border-slate-300 px-3.5 py-3 outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10"
-                  />
-                </label>
+                <p className="text-sm leading-6 text-slate-600">Add company information and set up its Company Admin account.</p>
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <label className="text-sm font-medium text-slate-700">
+                    Company name
+                    <input autoFocus required maxLength={160} value={name} onChange={(event) => setName(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-300 px-3.5 py-3 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10" />
+                  </label>
+                  <label className="text-sm font-medium text-slate-700">
+                    Company email
+                    <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-300 px-3.5 py-3 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10" />
+                  </label>
+                  <label className="text-sm font-medium text-slate-700">
+                    Contact number
+                    <input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-300 px-3.5 py-3 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10" />
+                  </label>
+                  <label className="text-sm font-medium text-slate-700">
+                    Website
+                    <input type="url" value={website} onChange={(event) => setWebsite(event.target.value)} placeholder="https://" className="mt-2 w-full rounded-xl border border-slate-300 px-3.5 py-3 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10" />
+                  </label>
+                  <label className="text-sm font-medium text-slate-700 sm:col-span-2">
+                    Address
+                    <input value={address} onChange={(event) => setAddress(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-300 px-3.5 py-3 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10" />
+                  </label>
+                  <label className="text-sm font-medium text-slate-700">
+                    City
+                    <input value={city} onChange={(event) => setCity(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-300 px-3.5 py-3 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10" />
+                  </label>
+                  <label className="text-sm font-medium text-slate-700">
+                    State / province
+                    <input value={state} onChange={(event) => setState(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-300 px-3.5 py-3 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10" />
+                  </label>
+                  <label className="text-sm font-medium text-slate-700">
+                    Country
+                    <input value={country} onChange={(event) => setCountry(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-300 px-3.5 py-3 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10" />
+                  </label>
+                  <label className="text-sm font-medium text-slate-700">
+                    Status
+                    <select value={status} onChange={(event) => setStatus(event.target.value as "active" | "inactive")} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-3">
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+                  </label>
+                  <fieldset className="text-sm font-medium text-slate-700 sm:col-span-2">
+                    <legend>Does this company have branches?</legend>
+                    <div className="mt-2 flex gap-3">
+                      <label className="flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2.5">
+                        <input type="radio" name="branchEnabled" checked={branchEnabled} onChange={() => setBranchEnabled(true)} />
+                        Yes
+                      </label>
+                      <label className="flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2.5">
+                        <input type="radio" name="branchEnabled" checked={!branchEnabled} onChange={() => setBranchEnabled(false)} />
+                        No
+                      </label>
+                    </div>
+                  </fieldset>
+                  <label className="text-sm font-medium text-slate-700 sm:col-span-2">
+                    Company description
+                    <textarea rows={4} value={description} onChange={(event) => setDescription(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-300 px-3.5 py-3 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10" />
+                  </label>
+                </div>
+                <section aria-labelledby="create-company-admin-title" className="border-t border-slate-200 pt-5">
+                  <h3 id="create-company-admin-title" className="font-semibold text-slate-950">Company Admin account</h3>
+                  <p className="mt-1 text-sm text-slate-500">Set the sign-in credentials for this company’s administrator.</p>
+                  <div className="mt-4 grid gap-5 sm:grid-cols-2">
+                    <label className="text-sm font-medium text-slate-700">
+                      Company Admin email
+                      <input type="email" autoComplete="username" required value={adminEmail} onChange={(event) => setAdminEmail(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-300 px-3.5 py-3 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10" />
+                    </label>
+                    <label className="text-sm font-medium text-slate-700">
+                      Company Admin password
+                      <input type="password" autoComplete="new-password" required minLength={14} maxLength={72} value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} placeholder="At least 14 characters" className="mt-2 w-full rounded-xl border border-slate-300 px-3.5 py-3 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10" />
+                      <span className="mt-1 block text-xs font-normal text-slate-500">Use at least 14 characters. The password is stored securely as a hash.</span>
+                    </label>
+                  </div>
+                </section>
                 {createError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{createError}</p>}
               </div>
               <footer className="sticky bottom-0 flex justify-end gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:px-7">
@@ -625,13 +689,28 @@ export default function CompaniesPage() {
                       <input value={profileCompany.country} onChange={(event) => updateProfile("country", event.target.value)} className="mt-2 w-full rounded-xl border border-slate-300 px-3.5 py-3 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10" />
                     </label>
                     {role === "SUPER_ADMIN" && (
-                      <label className="text-sm font-medium text-slate-700">
-                        Status
-                        <select value={profileCompany.status} onChange={(event) => updateProfile("status", event.target.value as CompanyProfile["status"])} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-3">
-                          <option value="active">Active</option>
-                          <option value="inactive">Inactive</option>
-                        </select>
-                      </label>
+                      <>
+                        <label className="text-sm font-medium text-slate-700">
+                          Status
+                          <select value={profileCompany.status} onChange={(event) => updateProfile("status", event.target.value as CompanyProfile["status"])} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-3">
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                          </select>
+                        </label>
+                        <fieldset className="text-sm font-medium text-slate-700 sm:col-span-2">
+                          <legend>Does this company have branches?</legend>
+                          <div className="mt-2 flex gap-3">
+                            <label className="flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2.5">
+                              <input type="radio" name={`branchEnabled-${profileCompany.id}`} checked={profileCompany.branchEnabled} onChange={() => updateProfile("branchEnabled", "true")} />
+                              Yes
+                            </label>
+                            <label className="flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2.5">
+                              <input type="radio" name={`branchEnabled-${profileCompany.id}`} checked={!profileCompany.branchEnabled} onChange={() => updateProfile("branchEnabled", "false")} />
+                              No
+                            </label>
+                          </div>
+                        </fieldset>
+                      </>
                     )}
                     <label className="text-sm font-medium text-slate-700 sm:col-span-2">
                       Company description

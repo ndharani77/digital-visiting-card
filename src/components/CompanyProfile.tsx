@@ -7,10 +7,16 @@ import EnquiryForm from "@/components/EnquiryForm";
 import CompanyProfilePrint from "@/components/CompanyProfilePrint";
 import CompanyPreviewDetailsEditor from "@/components/CompanyPreviewDetailsEditor";
 import {
+  getCompanyCustomTabFieldContent,
   getCompanyPreviewTabOrder,
   isCompanyPreviewTabHidden,
+  type CompanyCustomTab,
   type CompanyPreviewSettings,
 } from "@/lib/company-content";
+
+type ProfileTab =
+  | { id: string; label: string; kind: "about" | "services" | "enquiry" }
+  | { id: string; label: string; kind: "custom"; customTab: CompanyCustomTab };
 
 export default function CompanyProfile({
   recipientEmail,
@@ -19,7 +25,6 @@ export default function CompanyProfile({
   cardId,
   canEditPreview,
   isCustomPreview,
-  defaultServiceIds,
   onPreviewSaved,
 }: {
   recipientEmail: string;
@@ -28,14 +33,13 @@ export default function CompanyProfile({
   cardId: string;
   canEditPreview: boolean;
   isCustomPreview: boolean;
-  defaultServiceIds: string[];
   onPreviewSaved: (preview: CompanyPreviewSettings, isCustom: boolean) => void;
 }) {
   const [isEditingPreview, setIsEditingPreview] = useState(false);
   const [activeSlide, setActiveSlide] = useState(() => getCompanyPreviewTabOrder(preview)[0] ?? "about");
   const visibleServices = preview.services.items.filter((service) => service.title || service.description || service.image);
   const customTabs = preview.customTabs ?? [];
-  const tabs = getCompanyPreviewTabOrder(preview).flatMap((id) => {
+  const tabs: ProfileTab[] = getCompanyPreviewTabOrder(preview).flatMap((id): ProfileTab[] => {
     if (isCompanyPreviewTabHidden(preview, id)) return [];
     if (id === "about") return [{ id, label: preview.tabs.about, kind: "about" as const }];
     if (id === "services") return [{ id, label: preview.tabs.services, kind: "services" as const }];
@@ -153,26 +157,23 @@ export default function CompanyProfile({
           </div>
         ) : selectedTab?.kind === "custom" ? (
           <div role="group" aria-label={selectedTab.customTab.title} className="company-profile-screen space-y-5">
-            {selectedTab.customTab.fields.map((field) => (
-              <div key={field.id}>
-                {field.type === "service" && (field.title || field.description || field.image) && (
-                  <article className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                    {field.image && <Image src={field.image} alt={field.title ?? ""} width={960} height={540} unoptimized className="h-56 w-full object-cover" />}
-                    <div className="p-5">
-                      {field.title && <h3 className="company-brand-text text-base font-bold leading-6">
-                        {field.href
-                          ? <a href={field.href} target="_blank" rel="noopener noreferrer" className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600">{field.title}</a>
-                          : field.title}
-                      </h3>}
-                      {field.description && <p className="company-brand-text mt-2 whitespace-pre-line text-justify text-base leading-7">{field.description}</p>}
-                    </div>
-                  </article>
-                )}
-                {field.type === "heading" && field.content && <h3 className="company-brand-text text-lg font-semibold">{field.content}</h3>}
-                {field.type === "text" && field.content && <p className="company-brand-text whitespace-pre-line text-sm leading-6">{field.content}</p>}
-                {field.type === "image" && field.content && <Image src={field.content} alt={selectedTab.customTab.title} width={960} height={540} unoptimized className="max-h-80 w-full rounded-xl object-cover" />}
-              </div>
-            ))}
+            {selectedTab.customTab.fields.map((field) => {
+              const { heading, description, image } = getCompanyCustomTabFieldContent(field);
+              if (!heading && !description && !image) return null;
+              return (
+                <article key={field.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                  {image && <Image src={image} alt={heading || selectedTab.customTab.title} width={960} height={540} unoptimized className="max-h-80 w-full object-cover" />}
+                  <div className="p-5">
+                    {heading && <h3 className="company-brand-text text-base font-bold leading-6">
+                      {field.type === "service" && field.href
+                        ? <a href={field.href} target="_blank" rel="noopener noreferrer" className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600">{heading}</a>
+                        : heading}
+                    </h3>}
+                    {description && <p className="company-brand-text mt-2 whitespace-pre-line text-justify text-base leading-7">{description}</p>}
+                  </div>
+                </article>
+              );
+            })}
           </div>
         ) : (
           <div className="company-profile-screen">
@@ -217,7 +218,6 @@ export default function CompanyProfile({
           initialCardId={cardId}
           initialPreview={preview}
           initialIsCustom={isCustomPreview}
-          initialDefaultServiceIds={defaultServiceIds}
           onSaved={onPreviewSaved}
           onClose={() => setIsEditingPreview(false)}
         />

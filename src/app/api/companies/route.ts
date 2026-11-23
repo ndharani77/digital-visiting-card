@@ -21,6 +21,7 @@ function parseCompanyInput(value: unknown): CompanyInput | string {
   const country = typeof data.country === "string" ? data.country.trim() : "";
   const description = typeof data.description === "string" ? data.description.trim() : "";
   const status = data.status === undefined ? "active" : data.status;
+  const branchEnabled = data.branchEnabled === undefined ? false : data.branchEnabled;
   const preview = data.preview === undefined ? createDefaultCompanyPreview(name) : data.preview;
 
   if (!name || name.length > 160) return "Company name is required and must be 160 characters or fewer.";
@@ -29,6 +30,7 @@ function parseCompanyInput(value: unknown): CompanyInput | string {
   if (website && !/^https?:\/\/\S+$/i.test(website)) return "Enter a complete website URL starting with http:// or https://.";
   if (logoData.length > 750_000) return "Company logo is too large.";
   if (status !== "active" && status !== "inactive") return "Company status is invalid.";
+  if (typeof branchEnabled !== "boolean") return "Choose Yes or No for branch management.";
   if (!isCompanyPreviewSettings(preview)) return "Company preview details are invalid.";
 
   return {
@@ -43,6 +45,7 @@ function parseCompanyInput(value: unknown): CompanyInput | string {
     country,
     description,
     status,
+    branchEnabled,
     preview,
   };
 }

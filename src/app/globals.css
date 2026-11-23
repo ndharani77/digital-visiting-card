@@ -134,11 +134,10 @@ main textarea {
   border-radius: 0.75rem;
   transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
 }
-main input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
-main select:focus,
-main textarea:focus {
-  border-color: var(--company-brand-color);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--company-brand-color) 14%, transparent);
+body :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea):focus {
+  border-color: #cbd5e1;
+  box-shadow: none;
+  outline: none;
 }
 main > div > header h1 {
   color: var(--app-ink);
@@ -147,6 +146,9 @@ main > div > header h1 {
   line-height: 1.15;
   letter-spacing: -0.035em;
   text-wrap: balance;
+}
+.super-admin-hero h1 {
+  color: #fff;
 }
 main > div > header p[class*="uppercase"] {
   color: var(--company-brand-color);
@@ -167,9 +169,39 @@ main :is(section, article, form)[class*="rounded-2xl"][class*="border"][class*="
 .workspace-route-content > div[class*="min-h-screen"] {
   min-height: calc(100vh - 68px);
 }
+.workspace-route-content {
+  padding-top: 68px;
+}
+.workspace-route-content main.min-w-0.flex-1 {
+  padding: clamp(1.25rem, calc(1.25rem + 1vw), 2.5rem);
+}
+.workspace-route-content main.min-w-0.flex-1 > div[class*="mx-auto"] {
+  width: 100%;
+  max-width: 90rem;
+  margin-inline: auto;
+}
+.workspace-route-content main.min-w-0.flex-1 > div.create-card-shell {
+  max-width: 60rem;
+}
+.workspace-route-content main.min-w-0.flex-1 > div:first-child:not([class*="mx-auto"]) {
+  width: 100%;
+  max-width: 90rem;
+  margin-inline: auto;
+}
+.workspace-route-content main.min-w-0.flex-1 > div[class*="mx-auto"] > form {
+  width: 100%;
+  max-width: 60rem;
+  margin-inline: auto;
+}
+.workspace-route-content main.min-w-0.flex-1 > div > header {
+  margin-bottom: clamp(1.5rem, calc(1.25rem + 1vw), 2rem);
+}
 @media (min-width: 768px) {
   .workspace-route-content > div[class*="min-h-screen"] {
     min-height: calc(100vh - 64px);
+  }
+  .workspace-route-content {
+    padding-top: 0;
   }
 }
 main table {

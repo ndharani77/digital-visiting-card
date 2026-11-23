@@ -8,6 +8,7 @@ import {
   Building2,
   CreditCard,
   Download,
+  GitBranch,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -29,8 +30,8 @@ import {
 import { translate, type MessageKey } from "@/lib/messages";
 import { WorkspaceLayoutContext } from "@/layout/WorkspaceLayoutContext";
 
-type SessionUser = { role: UserRole; email: string; companyId: string | null };
-type CompanyOption = { id: string; name: string };
+type SessionUser = { role: UserRole; email: string; companyId: string | null; branchId: string | null };
+type CompanyOption = { id: string; name: string; branchEnabled?: boolean };
 type CompanyBrand = { name: string; logoData: string };
 type NavigationItem = { href: string; label: string; messageKey: MessageKey | null; icon: LucideIcon };
 
@@ -46,7 +47,6 @@ function isCompanyBrand(value: unknown): value is CompanyBrand {
 const navigation: NavigationItem[] = [
   { href: "/", label: "Dashboard", messageKey: "nav.dashboard", icon: LayoutDashboard },
   { href: "/companies", label: "Companies", messageKey: null, icon: Building2 },
-  { href: "/my-cards", label: "Visiting Cards", messageKey: "nav.cards", icon: CreditCard },
   { href: "/analytics", label: "Analytics", messageKey: null, icon: LayoutDashboard },
   { href: "/change-password", label: "Settings", messageKey: "nav.settings", icon: Settings2 },
 ];
@@ -71,10 +71,10 @@ const employeeNavigation: NavigationItem[] = [
 export default function Sidebar({ persistent = false }: { persistent?: boolean }) {
   const insideWorkspaceLayout = useContext(WorkspaceLayoutContext);
   if (insideWorkspaceLayout && !persistent) return null;
-  return <SidebarContents />;
+  return <SidebarContents persistent={persistent} />;
 }
 
-function SidebarContents() {
+function SidebarContents({ persistent = false }: { persistent?: boolean }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
@@ -177,7 +177,23 @@ function SidebarContents() {
     : isPlatformWideAdmin
       ? navigation
       : isCompanyWorkspace
-        ? companyNavigation
+        ? (() => {
+          const baseNavigation = user.role === "SUPER_ADMIN"
+            ? companyNavigation.filter(({ href }) => href !== "/my-cards")
+            : companyNavigation;
+          const activeCompanyIdForNavigation = activeCompanyId ?? user.companyId;
+          const activeCompany = companies.find((company) => company.id === activeCompanyIdForNavigation);
+          if (!activeCompany?.branchEnabled || user.branchId) return baseNavigation;
+          const withBranches = [...baseNavigation];
+          const insertAt = Math.max(1, withBranches.findIndex(({ href }) => href === "/company"));
+          withBranches.splice(insertAt >= 0 ? insertAt : withBranches.length, 0, {
+            href: "/branches",
+            label: "Branches",
+            messageKey: null,
+            icon: GitBranch,
+          });
+          return withBranches;
+        })()
         : employeeNavigation;
   const translateNavigation = (label: string, key: MessageKey | null) =>
     key ? translate(locale, key) : label;
@@ -266,7 +282,7 @@ function SidebarContents() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 flex h-[68px] items-center justify-between border-b border-slate-200/80 bg-white/95 px-4 backdrop-blur md:hidden">
+      <header className="fixed inset-x-0 top-0 z-40 flex h-[68px] items-center justify-between border-b border-slate-200/80 bg-white/95 px-4 backdrop-blur md:hidden">
         <Link href="/" className="flex min-w-0 items-center gap-3">
           <span className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl ${
             companyBrand?.logoData ? "bg-white" : "bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-sm shadow-blue-700/20"
@@ -291,7 +307,7 @@ function SidebarContents() {
       </header>
 
       {mobileOpen && (
-        <nav id="mobile-navigation" aria-label="Main navigation" className="absolute inset-x-0 top-[68px] z-40 border-b border-slate-200 bg-white p-3 shadow-xl md:hidden">
+        <nav id="mobile-navigation" aria-label="Main navigation" className="fixed inset-x-0 top-[68px] z-40 max-h-[calc(100vh-68px)] overflow-y-auto border-b border-slate-200 bg-white p-3 shadow-xl md:hidden">
           <div className="grid grid-cols-2 gap-2">
             {companyControl(true)}
             {visibleNavigation.map(({ href, label, messageKey, icon: Icon }) => (
@@ -314,7 +330,7 @@ function SidebarContents() {
         </nav>
       )}
 
-      <aside style={{ backgroundColor: "var(--company-sidebar-background)" }} className="sticky top-0 hidden h-screen w-[264px] shrink-0 flex-col px-4 py-6 text-white md:flex">
+      <aside style={{ backgroundColor: "var(--company-sidebar-background)" }} className={`${persistent ? "fixed inset-y-0 left-0 z-50" : "sticky top-0"} hidden h-screen w-[264px] shrink-0 flex-col overflow-y-auto px-4 py-6 text-white md:flex`}>
         <Link href="/" className="mb-6 flex min-w-0 items-center gap-3 px-2">
           <span className={`flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl ${
             companyBrand?.logoData ? "bg-white" : "bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-lg shadow-blue-950/30"

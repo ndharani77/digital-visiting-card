@@ -5,6 +5,7 @@ import { flushSync } from "react-dom";
 import { Download } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import type { VisitingCard } from "@/lib/types";
+import { getCardQrPath } from "@/lib/card-slug";
 
 type ExportWritable = {
   write(data: Blob): Promise<void>;
@@ -290,7 +291,7 @@ export default function BulkQRCodeExport() {
 
   return (
     <>
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+      <section className="mx-auto w-full max-w-6xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-bold text-slate-900">Select cards to export</h2>
@@ -371,7 +372,7 @@ export default function BulkQRCodeExport() {
 
       <div ref={qrContainer} aria-hidden="true" className="pointer-events-none fixed -left-[2000px] top-0">
         {qrCards.map((card) => (
-          <QRCodeSVG key={card.id} value={`${window.location.origin}/card/${card.id}?source=qr`} size={1024} level="H" includeMargin />
+          <QRCodeSVG key={card.id} value={`${window.location.origin}${getCardQrPath(card)}`} size={1024} level="H" includeMargin />
         ))}
       </div>
     </>

@@ -30,6 +30,7 @@ type ImportRow = {
   errors: string[];
   selected: boolean;
   cardId?: string;
+  cardSlug?: string;
   saveError?: string;
 };
 
@@ -192,7 +193,9 @@ export default function ImportExcelPage() {
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.message || "Unable to save this contact.");
-        setRows((current) => current.map((item) => item === row ? { ...item, cardId: result.id } : item));
+        setRows((current) => current.map((item) => item === row
+          ? { ...item, cardId: result.id, cardSlug: typeof result.publicSlug === "string" ? result.publicSlug : result.id }
+          : item));
         saved += 1;
       } catch (err) {
         setRows((current) => current.map((item) => item === row ? { ...item, saveError: err instanceof Error ? err.message : "Unable to save this contact." } : item));
@@ -232,7 +235,7 @@ export default function ImportExcelPage() {
             <p className="mt-1 text-sm text-slate-500">Upload an .xlsx workbook to create contact cards and QR codes for each valid row.</p>
           </header>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+          <section className="mx-auto w-full max-w-6xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h2 className="font-bold text-slate-900">Prepare your spreadsheet</h2>
@@ -301,7 +304,7 @@ export default function ImportExcelPage() {
                             <td className="px-4 py-3 text-slate-600">{row.contact.countryCode} {row.contact.mobile}</td>
                             <td className="px-4 py-3 text-slate-600">{row.contact.email || "—"}</td>
                             <td className="px-4 py-3">
-                              {row.cardId ? <Link href={`/card/${row.cardId}/view`} className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-800"><QrCode size={15} />Open QR code</Link> : <span className={row.errors.length || row.saveError ? "text-red-600" : "text-emerald-700"}>{status}</span>}
+                              {row.cardId ? <Link href={`/card/${encodeURIComponent(row.cardSlug || row.cardId)}/view`} className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-800"><QrCode size={15} />Open QR code</Link> : <span className={row.errors.length || row.saveError ? "text-red-600" : "text-emerald-700"}>{status}</span>}
                             </td>
                           </tr>
                         );

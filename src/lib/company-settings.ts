@@ -23,6 +23,7 @@ export type { CompanyPreviewSettings } from "@/lib/company-content";
 
 export type CompanySettings = {
   companyName: string;
+  address: string;
   website: string;
   logoData: string;
   preview: CompanyPreviewSettings;
@@ -38,6 +39,7 @@ const settingsLock = globalThis as typeof globalThis & {
 
 const defaults: CompanySettings = {
   companyName: DEFAULT_COMPANY,
+  address: "",
   website: DEFAULT_WEBSITE,
   logoData: DEFAULT_COMPANY_LOGO,
   preview: DEFAULT_COMPANY_PREVIEW,
@@ -75,6 +77,7 @@ export async function getCompanySettings(): Promise<CompanySettings> {
     const settings = JSON.parse(content) as Partial<CompanySettings>;
     return {
       companyName: typeof settings.companyName === "string" ? settings.companyName : defaults.companyName,
+      address: typeof settings.address === "string" ? settings.address : defaults.address,
       website: typeof settings.website === "string" ? settings.website : defaults.website,
       logoData: typeof settings.logoData === "string" ? settings.logoData : defaults.logoData,
       preview: normalizeCompanyPreviewSettings(settings.preview) ?? defaults.preview,
