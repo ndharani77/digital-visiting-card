@@ -19,6 +19,7 @@ type Company = {
   country: string;
   description: string;
   status: "active" | "inactive";
+  branchEnabled: boolean;
 };
 
 const emptyCompany: Company = {
@@ -33,6 +34,7 @@ const emptyCompany: Company = {
   country: "",
   description: "",
   status: "active",
+  branchEnabled: false,
 };
 
 export default function CompanyProfilePage() {

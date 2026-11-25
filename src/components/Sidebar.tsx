@@ -13,9 +13,8 @@ import {
   LogOut,
   Menu,
   Palette,
-  Plus,
   Settings2,
-  Upload,
+  ArrowLeftRight,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -29,6 +28,7 @@ import {
 } from "@/lib/user-preferences";
 import { translate, type MessageKey } from "@/lib/messages";
 import { WorkspaceLayoutContext } from "@/layout/WorkspaceLayoutContext";
+import CreateCardDrawerButton from "@/components/CreateCardDrawerButton";
 
 type SessionUser = { role: UserRole; email: string; companyId: string | null; branchId: string | null };
 type CompanyOption = { id: string; name: string; branchEnabled?: boolean };
@@ -46,6 +46,7 @@ function isCompanyBrand(value: unknown): value is CompanyBrand {
 
 const navigation: NavigationItem[] = [
   { href: "/", label: "Dashboard", messageKey: "nav.dashboard", icon: LayoutDashboard },
+  { href: "/all-cards", label: "Cards", messageKey: null, icon: CreditCard },
   { href: "/companies", label: "Companies", messageKey: null, icon: Building2 },
   { href: "/analytics", label: "Analytics", messageKey: null, icon: LayoutDashboard },
   { href: "/change-password", label: "Settings", messageKey: "nav.settings", icon: Settings2 },
@@ -53,19 +54,16 @@ const navigation: NavigationItem[] = [
 
 const companyNavigation: NavigationItem[] = [
   { href: "/", label: "Dashboard", messageKey: "nav.dashboard", icon: LayoutDashboard },
-  { href: "/create-card", label: "Create card", messageKey: "nav.createCard", icon: Plus },
   { href: "/my-cards", label: "Visiting Cards", messageKey: "nav.cards", icon: CreditCard },
-  { href: "/import-excel", label: "Import contacts", messageKey: "nav.importContacts", icon: Upload },
-  { href: "/export-qr", label: "QR Codes", messageKey: "nav.qrCodes", icon: Download },
+  { href: "/bulk-management", label: "Import / Export", messageKey: null, icon: ArrowLeftRight },
   { href: "/company", label: "Company Profile", messageKey: "nav.companyProfile", icon: Building2 },
-  { href: "/company/preview-details", label: "Preview Editing", messageKey: "nav.previewEditing", icon: Settings2 },
   { href: "/settings", label: "Settings", messageKey: "nav.settings", icon: Palette },
 ];
 
 const employeeNavigation: NavigationItem[] = [
   { href: "/", label: "Dashboard", messageKey: "nav.dashboard", icon: LayoutDashboard },
   { href: "/my-cards", label: "My Cards", messageKey: "nav.cards", icon: CreditCard },
-  { href: "/export-qr", label: "QR Codes", messageKey: "nav.qrCodes", icon: Download },
+  { href: "/bulk-management?tab=export", label: "QR Codes", messageKey: "nav.qrCodes", icon: Download },
 ];
 
 export default function Sidebar({ persistent = false }: { persistent?: boolean }) {
@@ -154,7 +152,8 @@ function SidebarContents({ persistent = false }: { persistent?: boolean }) {
   useEffect(() => setMobileOpen(false), [pathname]);
 
   function isActive(href: string) {
-    return href === "/" ? pathname === "/" : pathname === href;
+    const path = href.split("?")[0];
+    return path === "/" ? pathname === "/" : pathname === path;
   }
 
   function isHighlighted(href: string) {
@@ -311,16 +310,25 @@ function SidebarContents({ persistent = false }: { persistent?: boolean }) {
           <div className="grid grid-cols-2 gap-2">
             {companyControl(true)}
             {visibleNavigation.map(({ href, label, messageKey, icon: Icon }) => (
-              <Link
-                key={href}
-                href={href}
-                aria-current={isActive(href) ? "page" : undefined}
-                className={`flex min-h-12 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium ${
-                  isHighlighted(href) ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                <Icon size={18} />{translateNavigation(label, messageKey ?? null)}
-              </Link>
+              href === "/create-card" ? (
+                <CreateCardDrawerButton
+                  key={href}
+                  className="flex min-h-12 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  <Icon size={18} />{translateNavigation(label, messageKey ?? null)}
+                </CreateCardDrawerButton>
+              ) : (
+                <Link
+                  key={href}
+                  href={href}
+                  aria-current={isActive(href) ? "page" : undefined}
+                  className={`flex min-h-12 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium ${
+                    isHighlighted(href) ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  <Icon size={18} />{translateNavigation(label, messageKey ?? null)}
+                </Link>
+              )
             ))}
             <button type="button" onClick={() => void signOut()} disabled={signingOut} className="col-span-2 flex min-h-12 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60">
               <LogOut size={18} />{signingOut ? "Signing out..." : "Sign out"}
@@ -359,9 +367,15 @@ function SidebarContents({ persistent = false }: { persistent?: boolean }) {
         </p>
         <nav aria-label={isPlatformWideAdmin ? "Platform navigation" : "Workspace navigation"} className="space-y-1">
           {visibleNavigation.map(({ href, label, messageKey, icon: Icon }) => (
-            <Link key={href} href={href} aria-current={isActive(href) ? "page" : undefined} className={navClass(href)}>
-              <Icon size={18} strokeWidth={1.8} />{translateNavigation(label, messageKey ?? null)}
-            </Link>
+            href === "/create-card" ? (
+              <CreateCardDrawerButton key={href} className={navClass(href)}>
+                <Icon size={18} strokeWidth={1.8} />{translateNavigation(label, messageKey ?? null)}
+              </CreateCardDrawerButton>
+            ) : (
+              <Link key={href} href={href} aria-current={isActive(href) ? "page" : undefined} className={navClass(href)}>
+                <Icon size={18} strokeWidth={1.8} />{translateNavigation(label, messageKey ?? null)}
+              </Link>
+            )
           ))}
         </nav>
 

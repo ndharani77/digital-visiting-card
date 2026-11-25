@@ -1,5 +1,5 @@
-import CompanyPreviewDetailsEditor from "@/components/CompanyPreviewDetailsEditor";
+import { redirect } from "next/navigation";
 
 export default function CompanyPreviewDetailsPage() {
-  return <CompanyPreviewDetailsEditor />;
+  redirect("/company?tab=preview");
 }

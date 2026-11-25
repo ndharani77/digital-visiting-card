@@ -16,12 +16,14 @@ import {
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import DashboardCardSearch from "@/components/DashboardCardSearch";
+import CreateCardDrawerButton from "@/components/CreateCardDrawerButton";
 import CompanyNotifications from "@/components/CompanyNotifications";
 import SuperAdminDashboard from "@/components/SuperAdminDashboard";
 import { getActiveCompanyId, requirePageUser } from "@/lib/auth";
 import { getCardQrPath } from "@/lib/card-slug";
 import {
   getActivityLogsForUser,
+  getAllCardsForSuperAdmin,
   getCardsForUser,
   getCompany,
   getPlatformStatistics,
@@ -57,10 +59,11 @@ export default async function Dashboard() {
   const user = await requirePageUser("/");
   const activeCompanyId = await getActiveCompanyId(user);
   if (user.role === "SUPER_ADMIN" && !activeCompanyId) {
-    const [analytics, companies, activities] = await Promise.all([
+    const [analytics, companies, activities, cards] = await Promise.all([
       getPlatformStatistics(user),
       listCompanies(user),
       getActivityLogsForUser(user),
+      getAllCardsForSuperAdmin(user),
     ]);
     return (
       <SuperAdminDashboard
@@ -68,6 +71,7 @@ export default async function Dashboard() {
         companies={companies}
         analytics={analytics}
         activities={activities}
+        cards={cards}
       />
     );
   }
@@ -205,12 +209,12 @@ export default async function Dashboard() {
     ? [
         { href: "/companies", label: "Manage companies", icon: Building2, primary: true },
         ...(company ? [{ href: "/create-card", label: "Create a card", icon: Plus }] : []),
-        ...(company && cards.length > 0 ? [{ href: "/export-qr", label: "Export QR codes", icon: QrCode }] : []),
+        ...(company && cards.length > 0 ? [{ href: "/bulk-management?tab=export", label: "Export QR codes", icon: QrCode }] : []),
       ]
     : isCompanyAdmin
       ? [
           { href: "/create-card", label: "Create team card", icon: Plus, primary: true },
-          { href: "/import-excel", label: "Import contacts", icon: Upload },
+          { href: "/bulk-management", label: "Import / export", icon: Upload },
         ]
       : cards[0]
         ? [
@@ -245,7 +249,7 @@ export default async function Dashboard() {
             </div>
           </header>
 
-          <section className="relative mb-7 overflow-hidden rounded-[26px] bg-gradient-to-br from-[#10233f] via-[#123c70] to-[#146ac0] p-7 text-white shadow-xl shadow-blue-950/10 md:p-9">
+          <section className="relative mb-7 rounded-[26px] bg-gradient-to-br from-[#10233f] via-[#123c70] to-[#146ac0] p-7 text-white shadow-xl shadow-blue-950/10 md:p-9">
             <div aria-hidden="true" className="pointer-events-none absolute -right-20 -top-32 h-80 w-80 rounded-full border border-white/10" />
             <div aria-hidden="true" className="pointer-events-none absolute -right-2 -top-16 h-64 w-64 rounded-full border border-white/10" />
             <div className="relative flex flex-wrap items-center justify-between gap-8">
@@ -257,17 +261,31 @@ export default async function Dashboard() {
                 <p className="mt-3 max-w-xl text-sm leading-6 text-blue-100 md:text-base">{description}</p>
                 <div className="mt-6 flex flex-wrap gap-3">
                   {actions.map(({ href, label, icon: Icon, primary }) => (
-                    <Link
-                      key={href}
-                      href={href}
-                      className={`inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${
-                        primary
-                          ? "bg-white text-blue-950 shadow-sm hover:bg-blue-50"
-                          : "border border-white/25 bg-white/5 text-white hover:bg-white/10"
-                      }`}
-                    >
-                      <Icon size={17} />{label}<ArrowRight size={15} />
-                    </Link>
+                    href.startsWith("/create-card") ? (
+                      <CreateCardDrawerButton
+                        key={href}
+                        cardId={href.includes("?id=") ? new URLSearchParams(href.split("?")[1]).get("id") ?? undefined : undefined}
+                        className={`inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${
+                          primary
+                            ? "bg-white text-blue-950 shadow-sm hover:bg-blue-50"
+                            : "border border-white/25 bg-white/5 text-white hover:bg-white/10"
+                        }`}
+                      >
+                        <Icon size={17} />{label}<ArrowRight size={15} />
+                      </CreateCardDrawerButton>
+                    ) : (
+                      <Link
+                        key={href}
+                        href={href}
+                        className={`inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${
+                          primary
+                            ? "bg-white text-blue-950 shadow-sm hover:bg-blue-50"
+                            : "border border-white/25 bg-white/5 text-white hover:bg-white/10"
+                        }`}
+                      >
+                        <Icon size={17} />{label}<ArrowRight size={15} />
+                      </Link>
+                    )
                   ))}
                   {isPlatformWideView && !company && (
                     <p className="self-center text-sm text-blue-100">Select a company in the sidebar to manage its cards.</p>

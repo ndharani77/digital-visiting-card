@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, CreditCard, QrCode, Search } from "lucide-react";
-import CardActions from "@/components/CardActions";
+import { ArrowRight, CreditCard, Search } from "lucide-react";
+import CardPreviewDrawer from "@/components/CardPreviewDrawer";
+import CardPreviewTile from "@/components/CardPreviewTile";
+import CreateCardDrawerButton from "@/components/CreateCardDrawerButton";
 import type { VisitingCard } from "@/lib/types";
 import type { UserRole } from "@/lib/types";
-import { getCardQrPath, getCardQrViewerPath } from "@/lib/card-slug";
 
 type CardFilter = "recent" | "all" | "active" | "inactive";
 
@@ -25,6 +26,7 @@ export default function DashboardCardSearch({
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<CardFilter>("recent");
+  const [selectedCard, setSelectedCard] = useState<VisitingCard | null>(null);
   const normalizedQuery = query.trim().toLowerCase();
   const activeCards = cards.filter((card) => card.isActive);
   const inactiveCards = cards.filter((card) => !card.isActive);
@@ -146,7 +148,7 @@ export default function DashboardCardSearch({
             </p>
           </div>
           {role !== "EMPLOYEE" && (
-            <Link href="/my-cards" className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600">View all cards<ArrowRight size={16} /></Link>
+            <Link href={role === "SUPER_ADMIN" ? "/all-cards" : "/my-cards"} className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600">View all cards<ArrowRight size={16} /></Link>
           )}
         </div>
         {cards.length === 0 ? (
@@ -155,9 +157,15 @@ export default function DashboardCardSearch({
             <h3 className="font-semibold">{emptyTitle}</h3>
             <p className="mt-1 text-sm text-slate-500">{emptyDescription}</p>
             {showEmptyAction && (
-              <Link href={emptyActionHref} className="mt-5 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">
-                {emptyActionLabel}<ArrowRight size={16} />
-              </Link>
+              role === "SUPER_ADMIN" && !hasCompanySelected ? (
+                <Link href={emptyActionHref} className="mt-5 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">
+                  {emptyActionLabel}<ArrowRight size={16} />
+                </Link>
+              ) : (
+                <CreateCardDrawerButton className="mt-5 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">
+                  {emptyActionLabel}<ArrowRight size={16} />
+                </CreateCardDrawerButton>
+              )
             )}
           </div>
         ) : matchingCards.length === 0 ? (
@@ -165,31 +173,16 @@ export default function DashboardCardSearch({
             {normalizedQuery ? `No cards match “${query}”.` : filter === "active" ? "There are no active cards." : "There are no inactive cards."}
           </p>
         ) : (
-          <div className="dashboard-card-grid grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+          <div className="dashboard-card-grid grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
             {matchingCards.map((card) => (
-              <article key={card.id} className="dashboard-card-tile group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-900/[0.03] transition duration-200 hover:-translate-y-1 hover:border-blue-200 hover:shadow-xl hover:shadow-slate-900/[0.08]">
-                <div className="absolute right-3 top-3 z-10"><CardActions cardId={card.id} cardName={card.fullName} isActive={card.isActive} role={role} /></div>
-                <Link href={getCardQrPath(card)} aria-label={`Preview ${card.fullName}'s scanned visiting card`} className="block">
-                  <div className="mb-5 flex items-center justify-between pr-10">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-800"><CreditCard size={22} /></div>
-                    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${card.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
-                      <span className={`h-1.5 w-1.5 rounded-full ${card.isActive ? "bg-emerald-500" : "bg-slate-400"}`} />
-                      {card.isActive ? "Active" : "Inactive"}
-                    </span>
-                  </div>
-                  <h3 className="truncate text-base font-bold tracking-tight text-slate-950">{card.fullName}</h3>
-                  <p className="mt-1 truncate text-sm font-medium text-slate-600">{card.designation}</p>
-                  <p className="mt-1 truncate text-sm text-slate-500">{card.company}</p>
-                  <p className="mt-4 truncate text-sm text-slate-500">{card.email}</p>
-                </Link>
-                <Link href={getCardQrViewerPath(card)} className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4 text-sm font-semibold text-blue-700 hover:text-blue-800">
-                  <span>View QR code</span><QrCode size={17} />
-                </Link>
-              </article>
+              <CardPreviewTile key={card.id} card={card} onSelect={setSelectedCard} />
             ))}
           </div>
         )}
       </section>
+      {selectedCard && (
+        <CardPreviewDrawer card={selectedCard} role={role} onClose={() => setSelectedCard(null)} />
+      )}
     </>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Pencil, X } from "lucide-react";
 import EnquiryForm from "@/components/EnquiryForm";
 import CompanyProfilePrint from "@/components/CompanyProfilePrint";
@@ -50,6 +50,19 @@ export default function CompanyProfile({
   const selectedSlide = tabs.some((tab) => tab.id === activeSlide) ? activeSlide : tabs[0]?.id ?? "about";
   const selectedTab = tabs.find((tab) => tab.id === selectedSlide);
   const activeSlideIndex = tabs.findIndex((tab) => tab.id === selectedSlide);
+
+  useEffect(() => {
+    if (!isEditingPreview) return;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousDocumentOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousDocumentOverflow;
+    };
+  }, [isEditingPreview]);
+
   if (tabs.length === 0 && !canEditPreview) return null;
 
   return (
@@ -208,13 +221,14 @@ export default function CompanyProfile({
     </section>
     {isEditingPreview && <div className="fixed inset-0 z-[70] flex justify-end bg-slate-950/40">
       <button type="button" aria-label="Close preview editor" onClick={() => setIsEditingPreview(false)} className="absolute inset-0 h-full w-full cursor-default" />
-      <aside role="dialog" aria-modal="true" aria-labelledby="preview-editor-drawer-title" className="relative flex h-full w-full max-w-3xl flex-col bg-white shadow-2xl">
+      <aside role="dialog" aria-modal="true" aria-labelledby="preview-editor-drawer-title" className="relative flex h-full min-h-0 w-full max-w-3xl flex-col overscroll-contain bg-white shadow-2xl">
         <header className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-3">
           <h2 id="preview-editor-drawer-title" className="text-base font-bold text-slate-950">Edit this card preview</h2>
           <button type="button" aria-label="Close preview editor" onClick={() => setIsEditingPreview(false)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X size={20} /></button>
         </header>
         <CompanyPreviewDetailsEditor
           embedded
+          scrollable
           initialCardId={cardId}
           initialPreview={preview}
           initialIsCustom={isCustomPreview}

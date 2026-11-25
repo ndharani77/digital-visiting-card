@@ -1,15 +1,24 @@
-import { QrCode } from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
+import Image from "next/image";
+import { Globe, Linkedin, Mail, MapPin, Phone } from "lucide-react";
 import type { VisitingCard } from "@/lib/types";
-import { DEFAULT_CARD_ACCENT, DEFAULT_CARD_BACKGROUND, DEFAULT_COMPANY_LOGO, getCardTextColors } from "@/lib/card-defaults";
+import { DEFAULT_CARD_ACCENT, DEFAULT_COMPANY_LOGO } from "@/lib/card-defaults";
 
 type VisitingCardFaceProps = Pick<
   VisitingCard,
-  "fullName" | "designation" | "company" | "countryCode" | "mobile" | "email" | "address" | "website" | "logoData" | "backgroundColor" | "accentColor"
+  | "fullName"
+  | "designation"
+  | "company"
+  | "countryCode"
+  | "mobile"
+  | "email"
+  | "address"
+  | "website"
+  | "linkedin"
+  | "linkedinName"
+  | "logoData"
+  | "accentColor"
 > & {
-  qrUrl?: string;
   showPlaceholders?: boolean;
-  linksClickable?: boolean;
 };
 
 export default function VisitingCardFace({
@@ -21,66 +30,83 @@ export default function VisitingCardFace({
   email,
   address,
   website,
+  linkedin,
+  linkedinName,
   logoData,
-  backgroundColor,
   accentColor,
-  qrUrl,
   showPlaceholders = false,
-  linksClickable = false,
 }: VisitingCardFaceProps) {
   const accent = accentColor || DEFAULT_CARD_ACCENT;
-  const textColors = getCardTextColors(backgroundColor);
-  const detailClass = "truncate";
-
-  function renderLink(value: string, href = value) {
-    if (linksClickable) {
-      return <a href={href} target="_blank" rel="noopener noreferrer" className="hover:underline">{value}</a>;
-    }
-    return value;
-  }
+  const rows = [
+    {
+      Icon: Phone,
+      value: mobile ? `${countryCode || "+91"} ${mobile}` : showPlaceholders ? "Mobile number" : "",
+    },
+    { Icon: Mail, value: email || (showPlaceholders ? "Email address" : "") },
+    ...(address ? [{ Icon: MapPin, value: address }] : []),
+    ...(website || showPlaceholders
+      ? [{
+          Icon: Globe,
+          value: website
+            ? website.replace(/^https?:\/\//i, "").replace(/\/$/, "")
+            : "Website (if available)",
+        }]
+      : []),
+    ...(linkedin
+      ? [{ Icon: Linkedin, value: linkedinName?.trim() || fullName }]
+      : []),
+  ].filter((row) => row.value);
 
   return (
-    <div
-      className="aspect-[1.85/1] w-full overflow-hidden rounded-xl border border-blue-200 p-4 shadow-[0_14px_35px_rgba(15,23,42,0.12)] sm:p-5"
-      style={{ backgroundColor: backgroundColor || DEFAULT_CARD_BACKGROUND, color: textColors.foreground }}
+    <article
+      className="relative mx-auto w-full overflow-hidden rounded-[18px] border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.10)]"
+      style={{ "--card-preview-accent": accent } as React.CSSProperties}
     >
-      <div className="flex h-full gap-3 sm:gap-4">
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="mb-3 flex min-w-0 items-center gap-2">
-            <img src={logoData || DEFAULT_COMPANY_LOGO} alt={`${company || "Company"} logo`} className="h-8 w-8 shrink-0 rounded-md bg-white object-contain p-1" />
-            <div className="min-w-0">
-              <p className="truncate text-[10px] font-extrabold uppercase tracking-wide sm:text-xs" style={{ color: accent }}>{company || (showPlaceholders ? "YOUR COMPANY" : "")}</p>
-              <p className="text-[8px] sm:text-[9px]" style={{ color: textColors.secondary }}>Professional Business Card</p>
+      <svg
+        aria-hidden="true"
+        className="pointer-events-none absolute right-0 top-0 h-[100px] w-[56%]"
+        viewBox="0 0 240 112"
+        preserveAspectRatio="none"
+      >
+        <path d="M0 0h240v112C184 53 103 10 0 0Z" fill="var(--card-preview-accent)" />
+        <path d="M0 0C103 10 184 53 240 112" fill="none" stroke="#d8e6f2" strokeWidth="3" />
+        <path d="M86 0C155 17 207 57 240 101" fill="none" stroke="#a9c5df" strokeWidth="2" />
+      </svg>
+
+      <header className="relative z-10 px-5 pt-5">
+        <Image
+          src={logoData || DEFAULT_COMPANY_LOGO}
+          alt={`${company || "Company"} logo`}
+          width={150}
+          height={40}
+          unoptimized
+          className="h-10 w-[150px] max-w-full object-contain object-left"
+        />
+      </header>
+
+      <div className="relative z-10 px-5 pb-5 pt-10">
+        <h2 className="break-words text-xl font-bold leading-tight tracking-tight text-slate-950">
+          {fullName || (showPlaceholders ? "Your Name" : "")}
+        </h2>
+        <div className="mt-2 h-[2px] w-fit min-w-24 max-w-full bg-[var(--card-preview-accent)]" />
+        <p className="mt-2 break-words text-sm leading-5 text-slate-600">
+          {designation || (showPlaceholders ? "Your Designation" : "")}
+        </p>
+
+        <div className="mt-6 space-y-3">
+          {rows.map(({ Icon, value }, index) => (
+            <div key={`${index}-${value}`} className="flex min-w-0 items-start gap-3">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--card-preview-accent)] text-white">
+                <Icon size={15} aria-hidden="true" />
+              </span>
+              <span className="mt-0.5 min-h-7 w-px shrink-0 self-stretch bg-slate-300" />
+              <span className="min-w-0 break-words pt-0.5 text-sm leading-[1.4] text-slate-800">
+                {value}
+              </span>
             </div>
-          </div>
-          <div className="mt-auto min-w-0">
-            <h3 className="truncate text-sm font-bold sm:text-base">{fullName || (showPlaceholders ? "Your Name" : "")}</h3>
-            <p className="truncate text-[9px] sm:text-[10px]" style={{ color: textColors.secondary }}>{designation || (showPlaceholders ? "Your Designation" : "")}</p>
-            <div className="mt-2 h-px w-full" style={{ backgroundColor: `${accent}99` }} />
-            <div className="mt-2 space-y-1 text-[8px] sm:text-[9px]" style={{ color: textColors.foreground }}>
-              <p className={detailClass}>☎ {mobile ? `${countryCode || "+91"} ${mobile}` : showPlaceholders ? "Mobile number" : ""}</p>
-              <p className={detailClass}>✉ {email || (showPlaceholders ? "Email address" : "")}</p>
-              {address && <p className="whitespace-pre-line">⌖ {address}</p>}
-              {website && <p className={detailClass}>↗ {linksClickable ? renderLink(website.replace(/^https?:\/\//i, "").replace(/\/$/, ""), website) : website}</p>}
-            </div>
-          </div>
-        </div>
-        <div className="flex w-[38%] shrink-0 flex-col items-center justify-center border-l pl-2" style={{ borderColor: textColors.divider }}>
-          <div className="flex h-[160px] w-[160px] flex-col items-center justify-center rounded-lg bg-white p-2 text-slate-700 shadow-md">
-            {qrUrl ? (
-              <>
-                <QRCodeSVG value={qrUrl} size={128} level="M" title="QR code for this visiting card" />
-                <span className="mt-1 text-center text-[7px] leading-tight">SCAN TO OPEN</span>
-              </>
-            ) : (
-              <>
-                <QrCode size={48} strokeWidth={1.5} />
-                <span className="mt-1 text-center text-[7px] leading-tight">Generated after saving</span>
-              </>
-            )}
-          </div>
+          ))}
         </div>
       </div>
-    </div>
+    </article>
   );
 }

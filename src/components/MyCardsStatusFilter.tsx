@@ -1,25 +1,36 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { ArrowUpRight, CheckCircle2, CirclePause, CreditCard, QrCode, Search, X } from "lucide-react";
-import CardActions from "@/components/CardActions";
-import type { VisitingCard } from "@/lib/types";
-import type { UserRole } from "@/lib/types";
-import { getCardQrPath, getCardQrViewerPath } from "@/lib/card-slug";
+import { CheckCircle2, CirclePause, CreditCard, Search, X } from "lucide-react";
+import CardPreviewDrawer from "@/components/CardPreviewDrawer";
+import CardPreviewTile from "@/components/CardPreviewTile";
+import type { UserRole, VisitingCard } from "@/lib/types";
 
 type CardFilter = "all" | "active" | "inactive";
 
-export default function MyCardsStatusFilter({ cards, role }: { cards: VisitingCard[]; role: UserRole }) {
+export default function MyCardsStatusFilter({
+  cards,
+  role,
+  companies = [],
+}: {
+  cards: VisitingCard[];
+  role: UserRole;
+  companies?: { id: string; name: string }[];
+}) {
   const [filter, setFilter] = useState<CardFilter>("all");
   const [query, setQuery] = useState("");
   const [branchFilter, setBranchFilter] = useState("all");
+  const [companyFilter, setCompanyFilter] = useState("all");
+  const [selectedCard, setSelectedCard] = useState<VisitingCard | null>(null);
   const branchNames = [...new Set(cards.map((card) => card.branchName).filter((name): name is string => Boolean(name)))]
     .sort((left, right) => left.localeCompare(right));
-  const activeCards = cards.filter((card) => card.isActive);
-  const inactiveCards = cards.filter((card) => !card.isActive);
+  const companyCards = companyFilter === "all"
+    ? cards
+    : cards.filter((card) => card.companyId === companyFilter);
+  const activeCards = companyCards.filter((card) => card.isActive);
+  const inactiveCards = companyCards.filter((card) => !card.isActive);
   const normalizedQuery = query.trim().toLowerCase();
-  const matchingCards = cards.filter((card) => {
+  const matchingCards = companyCards.filter((card) => {
     const matchesBranch = branchFilter === "all"
       || (branchFilter === "__parent__" ? !card.branchId : card.branchName === branchFilter);
     const matchesQuery = !normalizedQuery || [
@@ -56,7 +67,22 @@ export default function MyCardsStatusFilter({ cards, role }: { cards: VisitingCa
           </button>}
         </div>
         </div>
-        {branchNames.length > 0 && (
+        {companies.length > 0 && (
+          <label className="min-w-[200px] text-sm font-medium text-slate-700">
+            <span className="sr-only">Filter by company</span>
+            <select
+              value={companyFilter}
+              onChange={(event) => setCompanyFilter(event.target.value)}
+              className="h-full min-h-12 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-700 shadow-sm"
+            >
+              <option value="all">All companies</option>
+              {companies.map((company) => (
+                <option key={company.id} value={company.id}>{company.name}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        {branchNames.length > 0 && companies.length === 0 && (
           <label className="text-sm font-medium text-slate-700">
             <span className="sr-only">Filter by branch</span>
             <select
@@ -78,7 +104,7 @@ export default function MyCardsStatusFilter({ cards, role }: { cards: VisitingCa
         <SummaryCard
           icon={<CreditCard size={20} />}
           label="Total cards"
-          count={cards.length}
+          count={companyCards.length}
           tone="blue"
           selected={filter === "all"}
           onClick={() => setFilter("all")}
@@ -103,10 +129,10 @@ export default function MyCardsStatusFilter({ cards, role }: { cards: VisitingCa
 
       <div className="space-y-10">
         {(filter === "all" || filter === "active") && matchingActiveCards.length > 0 && (
-          <CardSection title="Active cards" cards={matchingActiveCards} isActive role={role} />
+          <CardSection title="Active cards" cards={matchingActiveCards} isActive onSelectCard={setSelectedCard} />
         )}
         {(filter === "all" || filter === "inactive") && matchingInactiveCards.length > 0 && (
-          <CardSection title="Inactive cards" cards={matchingInactiveCards} isActive={false} role={role} />
+          <CardSection title="Inactive cards" cards={matchingInactiveCards} isActive={false} onSelectCard={setSelectedCard} />
         )}
         {normalizedQuery && matchingCards.length === 0 && (
           <p role="status" className="rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-600">No visiting cards match “{query.trim()}”.</p>
@@ -127,6 +153,9 @@ export default function MyCardsStatusFilter({ cards, role }: { cards: VisitingCa
           <p role="status" className="rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-600">No inactive cards match your search.</p>
         )}
       </div>
+      {selectedCard && (
+        <CardPreviewDrawer card={selectedCard} role={role} onClose={() => setSelectedCard(null)} />
+      )}
     </>
   );
 }
@@ -170,7 +199,17 @@ function SummaryCard({
   );
 }
 
-function CardSection({ title, cards, isActive, role }: { title: string; cards: VisitingCard[]; isActive: boolean; role: UserRole }) {
+function CardSection({
+  title,
+  cards,
+  isActive,
+  onSelectCard,
+}: {
+  title: string;
+  cards: VisitingCard[];
+  isActive: boolean;
+  onSelectCard: (card: VisitingCard) => void;
+}) {
   return (
     <section aria-labelledby={`${isActive ? "active" : "inactive"}-cards-title`}>
       <div className="mb-4 flex items-end justify-between gap-4">
@@ -180,30 +219,9 @@ function CardSection({ title, cards, isActive, role }: { title: string; cards: V
         </div>
         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{cards.length}</span>
       </div>
-      <div className="dashboard-card-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="dashboard-card-grid grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
         {cards.map((card) => (
-          <article key={card.id} className="dashboard-card-tile group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-900/[0.03] transition duration-200 hover:-translate-y-1 hover:border-blue-200 hover:shadow-xl hover:shadow-slate-900/[0.08]">
-            <div className="absolute right-3 top-3 z-10"><CardActions cardId={card.id} cardName={card.fullName} isActive={card.isActive} role={role} /></div>
-            <Link href={getCardQrPath(card)} aria-label={`Preview ${card.fullName}'s scanned visiting card`} className="block">
-              <div className="mb-5 flex items-center justify-between pr-10">
-                <span className={`flex h-12 w-12 items-center justify-center rounded-2xl ${isActive ? "bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-800" : "bg-slate-100 text-slate-500"}`}>
-                  <CreditCard size={22} />
-                </span>
-                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-emerald-500" : "bg-slate-400"}`} />
-                  {isActive ? "Active" : "Inactive"}
-                </span>
-              </div>
-              <h3 className="truncate text-base font-bold tracking-tight text-slate-950">{card.fullName}</h3>
-              <p className="mt-1 truncate text-sm font-medium text-slate-600">{card.designation}</p>
-              <p className="mt-1 truncate text-sm text-slate-500">{card.company}</p>
-              {card.branchName && <p className="mt-1 truncate text-xs font-semibold text-blue-700">Branch: {card.branchName}</p>}
-            </Link>
-            <Link href={getCardQrViewerPath(card)} className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4 text-sm font-semibold text-blue-700 hover:text-blue-800">
-              <span>View QR code</span>
-              <span className="flex items-center gap-2"><QrCode size={17} /><ArrowUpRight size={16} /></span>
-            </Link>
-          </article>
+          <CardPreviewTile key={card.id} card={card} onSelect={onSelectCard} />
         ))}
       </div>
     </section>

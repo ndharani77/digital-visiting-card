@@ -3,7 +3,7 @@
 import { useEffect, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Eye, EyeOff, ImagePlus, Plus, RotateCcw, Save, Trash2, X } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, GripVertical, ImagePlus, Plus, RotateCcw, Save, Trash2, X } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import {
   DEFAULT_COMPANY_PREVIEW,
@@ -72,6 +72,7 @@ function ImageEditor({
 
 type CompanyPreviewDetailsEditorProps = {
   embedded?: boolean;
+  scrollable?: boolean;
   initialCardId?: string;
   initialPreview?: CompanyPreviewSettings;
   initialIsCustom?: boolean;
@@ -81,6 +82,7 @@ type CompanyPreviewDetailsEditorProps = {
 
 export default function CompanyPreviewDetailsEditor({
   embedded = false,
+  scrollable = false,
   initialCardId,
   initialPreview,
   initialIsCustom = false,
@@ -106,12 +108,12 @@ export default function CompanyPreviewDetailsEditor({
 
   useEffect(() => {
     if (embedded) {
-      if (!initialCardId || !initialPreview) {
+      if (!initialPreview) {
         setError("Card preview details are unavailable.");
         setLoading(false);
         return;
       }
-      setCardId(initialCardId);
+      setCardId(initialCardId ?? "");
       setPreview(initialPreview);
       setIsCustom(initialIsCustom);
       setLoaded(true);
@@ -450,25 +452,42 @@ export default function CompanyPreviewDetailsEditor({
   }
 
   const editorTabOrder = getCompanyPreviewTabOrder(preview);
+  const Content = embedded ? "div" : "main";
+  const embeddedClass = scrollable
+    ? "flex h-full min-h-0 flex-col"
+    : "flex min-w-0 flex-col";
+  const embeddedContentClass = scrollable
+    ? "min-h-0 min-w-0 flex-1 overflow-y-auto p-5 md:p-8"
+    : "min-w-0 flex-1 p-0";
 
   return (
-    <div className={embedded ? "flex h-full flex-col" : "flex min-h-screen flex-col md:flex-row"}>
+    <div className={embedded ? embeddedClass : "flex min-h-screen flex-col md:flex-row"}>
       {!embedded && <Sidebar />}
-      <main className={embedded ? "min-h-0 min-w-0 flex-1 overflow-y-auto p-5 md:p-8" : "min-w-0 flex-1 p-5 md:p-8 xl:p-10"}>
-        <div className="mx-auto max-w-4xl">
+      <Content className={embedded ? embeddedContentClass : "min-w-0 flex-1 p-5 md:p-8 xl:p-10"}>
+        <div className="mx-auto max-w-5xl">
           {cardId && !embedded && <Link href="/my-cards" className="mb-5 inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-blue-600"><ArrowLeft size={16} />Back to My Visiting Cards</Link>}
-          <header className="mb-7">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700">{cardId ? "Individual card settings" : "Company defaults"}</p>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">{embedded ? "Edit card preview" : cardId ? "Card preview" : "Scan page content"}</h1>
-            <p className="mt-1 text-sm text-slate-500">{cardId
-              ? "Customize the About Us, Services, Enquiry form, and default WhatsApp message for this card. Until saved, it uses company-wide defaults."
-              : "Manage the default About Us, Services, Enquiry content, and WhatsApp message used by cards without custom preview details. Enquiries continue to open the card owner’s email app."}</p>
-            <p className="mt-2 text-xs font-medium text-blue-700">{cardId
-              ? "Changes saved here apply only to this card."
-              : "Company-wide defaults apply to cards without individual preview customizations."}</p>
+          <header className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700">{cardId ? "Individual card settings" : "Card experience"}</p>
+                <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-950 md:text-3xl">{embedded && cardId ? "Edit card preview" : cardId ? "Card preview" : "Scan page content"}</h1>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{cardId
+                  ? "Customize the About, Services, Enquiry, and WhatsApp content for this card. Unchanged settings continue to use company defaults."
+                  : "Customize the content visitors see after scanning a card. Enquiries are sent to the card owner’s email."}</p>
+              </div>
+              <span className="inline-flex shrink-0 items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-600" aria-hidden="true" />
+                {cardId ? "Card-specific" : "Company default"}
+              </span>
+            </div>
+            <p className="mt-4 rounded-xl bg-slate-50 px-3.5 py-3 text-xs leading-5 text-slate-600">
+              {cardId
+                ? "Changes apply only to this card. Restore company defaults at any time."
+                : "Company defaults apply to cards without individual preview customizations."}
+            </p>
           </header>
 
-          <div role="group" aria-label="Preview detail tabs" className="mb-6 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+          <div role="group" aria-label="Preview detail tabs" className="mb-6 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
             {editorTabOrder.map((tabId) => {
               const label = tabLabel(tabId, preview);
               const isHidden = isCompanyPreviewTabHidden(preview, tabId);
@@ -476,8 +495,8 @@ export default function CompanyPreviewDetailsEditor({
                 <div
                   key={tabId}
                   data-preview-tab-target={tabId}
-                  className={`flex items-center rounded-lg border transition-colors ${
-                    dragOverTabId === tabId ? "border-blue-500 bg-blue-50" : "border-slate-200"
+                  className={`flex items-center rounded-xl border transition-colors ${
+                    dragOverTabId === tabId ? "border-blue-400 bg-blue-50" : activeSlide === tabId ? "border-blue-200 bg-blue-50/70" : "border-transparent hover:bg-slate-50"
                   }`}
                 >
                   <button
@@ -503,10 +522,11 @@ export default function CompanyPreviewDetailsEditor({
                       finishTabDrag();
                     }}
                     onPointerCancel={finishTabDrag}
-                    className={`inline-flex min-h-10 touch-none items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 ${
-                      activeSlide === tabId ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
+                    className={`inline-flex min-h-10 touch-none items-center gap-1.5 rounded-l-lg px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 ${
+                      activeSlide === tabId ? "text-blue-800" : "text-slate-600 hover:text-slate-900"
                     } ${draggedTabId === tabId ? "cursor-grabbing opacity-50" : "cursor-grab"}`}
                   >
+                    <GripVertical size={14} aria-hidden="true" className={activeSlide === tabId ? "text-blue-500" : "text-slate-400"} />
                     {label}
                   </button>
                   <button
@@ -715,14 +735,22 @@ export default function CompanyPreviewDetailsEditor({
           {loading && <p role="status" className="mt-5 text-sm text-slate-500">Loading preview details...</p>}
           {error && <p role="alert" className="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
           {message && <p role="status" className="mt-5 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700">{message}</p>}
-          <footer className="sticky bottom-0 z-20 mt-7 flex justify-end border-t border-slate-200 bg-white/95 px-2 py-4 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur sm:px-0">
-            <div className="flex flex-wrap justify-end gap-3">
+          {(!embedded || !scrollable) && (
+            <footer className="mt-7 flex flex-wrap justify-end gap-3 border-t border-slate-200 py-5">
               {cardId && <button type="button" onClick={() => { void restoreCompanyDefaults(); }} disabled={loading || !loaded || saving || !isCustom} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"><RotateCcw size={17} />Use company defaults</button>}
               <button type="button" onClick={() => { void save(); }} disabled={loading || !loaded || saving} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"><Save size={17} />{saving ? "Saving..." : "Save preview details"}</button>
-            </div>
-          </footer>
+            </footer>
+          )}
         </div>
-      </main>
+      </Content>
+      {embedded && scrollable && (
+        <footer className="shrink-0 border-t border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur">
+          <div className="mx-auto grid max-w-4xl grid-cols-1 gap-2 min-[400px]:grid-cols-2">
+            {cardId && <button type="button" onClick={() => { void restoreCompanyDefaults(); }} disabled={loading || !loaded || saving || !isCustom} className="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-200 px-2 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"><RotateCcw size={17} />Use company defaults</button>}
+            <button type="button" onClick={() => { void save(); }} disabled={loading || !loaded || saving} className="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-blue-600 px-2 py-2.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"><Save size={17} />{saving ? "Saving..." : "Save preview details"}</button>
+          </div>
+        </footer>
+      )}
       {newTabDrawerOpen && (
         <div className="fixed inset-0 z-[70] flex justify-end bg-slate-950/40">
           <button type="button" aria-label="Close new tab form" onClick={() => setNewTabDrawerOpen(false)} className="absolute inset-0 h-full w-full cursor-default" />

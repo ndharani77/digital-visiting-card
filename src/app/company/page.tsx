@@ -3,10 +3,12 @@
 import { useEffect, useState, type FormEvent, type ChangeEvent } from "react";
 import { Building2, Crop, Globe, ImagePlus, MapPin, Save } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
+import CompanyPreviewDetailsEditor from "@/components/CompanyPreviewDetailsEditor";
 import { DEFAULT_COMPANY, DEFAULT_COMPANY_LOGO, DEFAULT_WEBSITE } from "@/lib/card-defaults";
 import { DEFAULT_COMPANY_PREVIEW, isCompanyPreviewSettings } from "@/lib/company-content";
 import { DEFAULT_CARD_APPEARANCE, DEFAULT_COMPANY_THEME, isCardAppearance, isCompanyTheme } from "@/lib/company-theme";
 import type { CompanySettings } from "@/lib/company-settings";
+import VisitingCardFace from "@/components/VisitingCardFace";
 
 const initialSettings: CompanySettings = {
   companyName: DEFAULT_COMPANY,
@@ -47,12 +49,17 @@ function responseMessage(value: unknown, fallback: string) {
 
 export default function CompanyPage() {
   const [settings, setSettings] = useState(initialSettings);
+  const [activeSection, setActiveSection] = useState<"profile" | "preview">("profile");
   const [loading, setLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [cropSource, setCropSource] = useState("");
+
+  useEffect(() => {
+    setActiveSection(new URLSearchParams(window.location.search).get("tab") === "preview" ? "preview" : "profile");
+  }, []);
 
   useEffect(() => {
     fetch("/api/company")
@@ -125,18 +132,66 @@ export default function CompanyPage() {
     }
   }
 
+  function selectSection(section: "profile" | "preview") {
+    setActiveSection(section);
+    const url = new URL(window.location.href);
+    if (section === "preview") url.searchParams.set("tab", "preview");
+    else url.searchParams.delete("tab");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}`);
+  }
+
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
       <Sidebar />
       <main className="min-w-0 flex-1 p-5 md:p-8 xl:p-10">
-        <div className="mx-auto max-w-3xl">
+        <div className={`mx-auto w-full ${activeSection === "preview" ? "max-w-5xl" : "max-w-3xl"}`}>
           <header className="mb-7">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700">Brand settings</p>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Card branding</h1>
-            <p className="mt-1 text-sm text-slate-500">Manage company details and defaults for new cards.</p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Company settings</h1>
+            <p className="mt-1 text-sm text-slate-500">Manage company information and the content shown on scanned cards.</p>
           </header>
 
-          <form onSubmit={save} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+          <div role="tablist" aria-label="Company settings sections" className="mb-6 flex w-fit gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+            <button
+              type="button"
+              role="tab"
+              id="company-settings-profile-tab"
+              aria-controls="company-settings-profile-panel"
+              aria-selected={activeSection === "profile"}
+              onClick={() => selectSection("profile")}
+              className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors ${activeSection === "profile" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+            >
+              Company Profile
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="company-settings-preview-tab"
+              aria-controls="company-settings-preview-panel"
+              aria-selected={activeSection === "preview"}
+              onClick={() => selectSection("preview")}
+              className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors ${activeSection === "preview" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+            >
+              Preview Editing
+            </button>
+          </div>
+
+          {activeSection === "preview" ? (
+            <section id="company-settings-preview-panel" role="tabpanel" aria-labelledby="company-settings-preview-tab">
+              {loaded ? (
+                <CompanyPreviewDetailsEditor
+                  embedded
+                  initialPreview={settings.preview}
+                  onSaved={(preview) => setSettings((current) => ({ ...current, preview }))}
+                />
+              ) : (
+                <p role="status" className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
+                  Loading company preview settings...
+                </p>
+              )}
+            </section>
+          ) : (
+          <form id="company-settings-profile-panel" role="tabpanel" aria-labelledby="company-settings-profile-tab" onSubmit={save} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
             <div className="grid gap-5">
               <label>
                 <span className="mb-2 block text-sm font-semibold text-slate-700">Company name</span>
@@ -214,6 +269,8 @@ export default function CompanyPage() {
               {cropSource && (
                 <LogoCropEditor
                   source={cropSource}
+                  companyName={settings.companyName}
+                  website={settings.website}
                   onCancel={() => setCropSource("")}
                   onApply={(logoData) => {
                     setSettings((current) => ({ ...current, logoData }));
@@ -232,6 +289,7 @@ export default function CompanyPage() {
               <button disabled={loading || !loaded || saving} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"><Save size={17} />{saving ? "Saving..." : "Save company settings"}</button>
             </div>
           </form>
+          )}
         </div>
       </main>
     </div>
@@ -271,10 +329,14 @@ function createCroppedLogo(
 
 function LogoCropEditor({
   source,
+  companyName,
+  website,
   onCancel,
   onApply,
 }: {
   source: string;
+  companyName: string;
+  website: string;
   onCancel: () => void;
   onApply: (logoData: string) => void;
 }) {
@@ -403,32 +465,29 @@ function LogoCropEditor({
             <h3 className="text-sm font-semibold text-slate-800">QR scan preview</h3>
             <p className="mt-1 text-xs text-slate-500">The logo updates live. Contact details are sample placeholders.</p>
           </div>
-          <section aria-label="QR scanned card preview" className="relative mx-auto max-w-[430px] overflow-hidden rounded-[18px] border border-slate-200 bg-white shadow-[0_12px_36px_rgba(15,23,42,0.08)]">
-            <svg aria-hidden="true" className="pointer-events-none absolute right-0 top-0 h-[100px] w-[56%]" viewBox="0 0 240 112" preserveAspectRatio="none">
-              <path d="M0 0h240v112C184 53 103 10 0 0Z" fill="var(--company-brand-color)" />
-              <path d="M0 0C103 10 184 53 240 112" fill="none" stroke="#d8e6f2" strokeWidth="3" />
-              <path d="M86 0C155 17 207 57 240 101" fill="none" stroke="#a9c5df" strokeWidth="2" />
-            </svg>
-            <header className="relative z-10 px-5 pt-5">
-              {previewLogo ? (
-                <img src={previewLogo} alt="Cropped logo in QR scan card" className="h-10 w-[150px] max-w-full object-contain object-left" />
-              ) : (
-                <span className="flex h-10 w-[150px] items-center text-xs text-slate-400">Preparing preview...</span>
-              )}
-            </header>
-            <div className="relative z-10 mt-8 px-5">
-              <div className="w-fit max-w-full">
-                <h4 className="break-words text-xl font-bold leading-tight tracking-tight text-[var(--company-brand-dark)]">Contact name</h4>
-                <div className="mt-2 h-[2px] w-full rounded-full bg-gradient-to-r from-[var(--company-brand-light)] via-[var(--company-brand-color)] to-[var(--company-brand-dark)]" />
-              </div>
-              <p className="mt-2 text-sm leading-5 text-slate-600">Job title</p>
-            </div>
-            <div className="relative z-10 space-y-3 px-5 pb-5 pt-6 text-sm text-[var(--company-brand-dark)]">
-              <p className="border-b border-slate-100 pb-2">Phone number</p>
-              <p className="border-b border-slate-100 pb-2">Email address</p>
-              <p className="text-slate-500">Website (if available)</p>
-            </div>
-          </section>
+          <div className="mx-auto max-w-[430px]">
+            {previewLogo ? (
+              <VisitingCardFace
+                fullName=""
+                designation=""
+                company={companyName}
+                countryCode="+91"
+                mobile=""
+                email=""
+                address=""
+                website={website}
+                linkedin=""
+                linkedinName=""
+                logoData={previewLogo}
+                accentColor="var(--company-brand-color)"
+                showPlaceholders
+              />
+            ) : (
+              <p role="status" className="rounded-xl border border-dashed border-slate-300 bg-white p-5 text-center text-sm text-slate-500">
+                Preparing preview...
+              </p>
+            )}
+          </div>
         </div>
       )}
 

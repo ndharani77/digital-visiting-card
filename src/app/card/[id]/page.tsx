@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { ArrowLeft, Globe, LoaderCircle, Mail, MapPin, Phone, Linkedin, MessageCircle, Share2, Facebook, Link2, UserPlus, X } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
+import { Globe, LoaderCircle, Mail, MapPin, Phone, Linkedin, MessageCircle, Share2, Facebook, Link2, UserPlus, X, Pencil } from "lucide-react";
 import VisitingCardFace from "@/components/VisitingCardFace";
 import QRCodeDownloads from "@/components/QRCodeDownloads";
 import CompanyProfile from "@/components/CompanyProfile";
@@ -10,6 +9,7 @@ import CardPreviewPdfDownload from "@/components/CardPreviewPdfDownload";
 import type { VisitingCard } from "@/lib/types";
 import { getCardQrPath } from "@/lib/card-slug";
 import { createVCard } from "@/lib/vcard";
+import { validateCardFields, type CardFieldErrors } from "@/lib/card-validation";
 import {
   isCompanyPreviewSettings,
   mergeCardPreviewWithCompanyDefaults,
@@ -18,6 +18,16 @@ import {
 import { DEFAULT_COMPANY_THEME, normalizeCompanyTheme, type CompanyTheme } from "@/lib/company-theme";
 
 type CompanyBranding = { companyName: string; logoData: string };
+type CardHolderEditValues = {
+  fullName: string;
+  designation: string;
+  countryCode: string;
+  mobile: string;
+  email: string;
+  address: string;
+  linkedin: string;
+  linkedinName: string;
+};
 
 function oklabToRgb(lightness: number, a: number, b: number, alpha?: string) {
   const l = lightness + 0.3963377774 * a + 0.2158037573 * b;
@@ -154,10 +164,15 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
   const [companyTheme, setCompanyTheme] = useState<CompanyTheme>(DEFAULT_COMPANY_THEME);
   const [canEditCardPreview, setCanEditCardPreview] = useState(false);
   const [isCardPreviewCustom, setIsCardPreviewCustom] = useState(false);
+  const [cardEditValues, setCardEditValues] = useState<CardHolderEditValues | null>(null);
+  const [cardEditErrors, setCardEditErrors] = useState<CardFieldErrors>({});
+  const [cardEditError, setCardEditError] = useState("");
+  const [savingCardDetails, setSavingCardDetails] = useState(false);
   const [error, setError] = useState("");
   const [id, setId] = useState("");
   const [qrUrl, setQrUrl] = useState("");
   const [isQrVisit, setIsQrVisit] = useState<boolean | null>(null);
+  const [isEmbeddedPreview, setIsEmbeddedPreview] = useState(false);
   const [canReturnToDashboard, setCanReturnToDashboard] = useState(false);
   const [contactError, setContactError] = useState("");
   const [contactMessage, setContactMessage] = useState("");
@@ -169,13 +184,16 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
   useEffect(() => {
     params.then(({ id: cardId }) => {
       setId(cardId);
-      setIsQrVisit(new URLSearchParams(window.location.search).get("source") === "qr");
+      const searchParams = new URLSearchParams(window.location.search);
+      setIsQrVisit(searchParams.get("source") === "qr");
+      setIsEmbeddedPreview(window.parent !== window);
     });
   }, [params]);
 
   useEffect(() => {
     if (!id) return;
-    const qrVisit = new URLSearchParams(window.location.search).get("source") === "qr";
+    const searchParams = new URLSearchParams(window.location.search);
+    const qrVisit = searchParams.get("source") === "qr";
     async function loadCard() {
       try {
         const response = await fetch(`/api/public/cards/${encodeURIComponent(id)}`);
@@ -263,6 +281,13 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
         const response = await fetch("/api/auth/session");
         if (response.status === 401) return;
         if (!response.ok) throw new Error("Unable to verify dashboard access.");
+        const result: unknown = await response.json();
+        if (!result || typeof result !== "object" || !("user" in result) ||
+            !result.user || typeof result.user !== "object" || !("role" in result.user) ||
+            typeof result.user.role !== "string" ||
+            !["SUPER_ADMIN", "COMPANY_ADMIN", "EMPLOYEE"].includes(result.user.role)) {
+          throw new Error("Current session details are invalid.");
+        }
         if (!cancelled) setCanReturnToDashboard(true);
       } catch (accessError) {
         if (!cancelled) console.error("Unable to verify dashboard access from the card preview.", accessError);
@@ -271,6 +296,70 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
     void checkDashboardAccess();
     return () => { cancelled = true; };
   }, [isQrVisit]);
+
+  useEffect(() => {
+    if (!card || isQrVisit !== true || !isEmbeddedPreview) return;
+    const activeCard: VisitingCard = card;
+    window.parent.postMessage(
+      { type: "card-preview-ready", cardId: activeCard.id },
+      window.location.origin,
+    );
+
+    function handlePreviewMessage(event: MessageEvent<unknown>) {
+      if (event.origin !== window.location.origin || event.source !== window.parent) return;
+      if (!event.data || typeof event.data !== "object" || !("type" in event.data) ||
+          event.data.type !== "card-preview-toggle-edit" || !("cardId" in event.data) ||
+          event.data.cardId !== activeCard.id) return;
+
+      const nextIsEditing = !cardEditValues;
+      setCardEditValues(nextIsEditing ? {
+        fullName: activeCard.fullName,
+        designation: activeCard.designation,
+        countryCode: activeCard.countryCode || "+91",
+        mobile: activeCard.mobile,
+        email: activeCard.email,
+        address: activeCard.address,
+        linkedin: activeCard.linkedin,
+        linkedinName: activeCard.linkedinName || "",
+      } : null);
+      setCardEditErrors({});
+      setCardEditError("");
+      window.parent.postMessage(
+        { type: "card-preview-edit-state", cardId: activeCard.id, isEditing: nextIsEditing },
+        window.location.origin,
+      );
+    }
+
+    window.addEventListener("message", handlePreviewMessage);
+    return () => window.removeEventListener("message", handlePreviewMessage);
+  }, [card, cardEditValues, isEmbeddedPreview, isQrVisit]);
+
+  useEffect(() => {
+    if (!card || isQrVisit !== true || !isEmbeddedPreview) return;
+    const activeCard = card;
+    const previewPage = document.querySelector<HTMLElement>(".public-card-page");
+    if (!previewPage) return;
+    const activePreviewPage = previewPage;
+
+    function reportPreviewHeight() {
+      window.parent.postMessage(
+        { type: "card-preview-height", cardId: activeCard.id, height: activePreviewPage.scrollHeight },
+        window.location.origin,
+      );
+    }
+
+    const resizeObserver = new ResizeObserver(reportPreviewHeight);
+    resizeObserver.observe(activePreviewPage);
+    window.addEventListener("load", reportPreviewHeight);
+    window.addEventListener("resize", reportPreviewHeight);
+    reportPreviewHeight();
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("load", reportPreviewHeight);
+      window.removeEventListener("resize", reportPreviewHeight);
+    };
+  }, [card, companyPreview, cardEditValues, isEmbeddedPreview, isQrVisit]);
 
   useEffect(() => {
     document.documentElement.dataset.companyTheme = companyTheme;
@@ -350,20 +439,164 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
     }
   }
 
-  if (error) return <main className="flex min-h-screen items-center justify-center p-6"><div className="rounded-2xl bg-white p-8 text-center shadow"><h1 className="text-xl font-bold">Card unavailable</h1><p className="mt-2 text-sm text-slate-500">{error}</p>{(isQrVisit === false || canReturnToDashboard) && <Link href="/" className="mt-5 inline-flex items-center gap-2 text-blue-600"><ArrowLeft size={16} />Back to dashboard</Link>}</div></main>;
-  if (!card) return <main className="flex min-h-screen flex-col items-center justify-center gap-4 text-sm text-slate-500">{canReturnToDashboard && <Link href="/" className="inline-flex items-center gap-2 text-blue-600"><ArrowLeft size={16} />Back to dashboard</Link>}Loading digital visiting card...</main>;
-  if (isQrVisit && (!companyPreview || !companyBranding)) return <main className="flex min-h-screen flex-col items-center justify-center gap-4 text-sm text-slate-500">{canReturnToDashboard && <Link href="/" className="inline-flex items-center gap-2 text-blue-600"><ArrowLeft size={16} />Back to dashboard</Link>}Loading digital visiting card...</main>;
+  async function saveCardHolderDetails(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!card || !cardEditValues || savingCardDetails) return;
+
+    const payload: Record<string, unknown> = {
+      ...cardEditValues,
+      company: card.company,
+      website: card.website,
+    };
+    if (card.logoData) payload.logoData = card.logoData;
+    const validationErrors = validateCardFields(payload);
+    setCardEditErrors(validationErrors);
+    setCardEditError("");
+    if (Object.keys(validationErrors).length > 0) return;
+
+    setSavingCardDetails(true);
+    try {
+      const response = await fetch(`/api/cards/${encodeURIComponent(card.id)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const result: unknown = await response.json();
+      if (!response.ok) {
+        const message = result && typeof result === "object" && "message" in result && typeof result.message === "string"
+          ? result.message
+          : "Unable to update card-holder details.";
+        throw new Error(message);
+      }
+
+      const publicSlug = result && typeof result === "object" && "publicSlug" in result && typeof result.publicSlug === "string"
+        ? result.publicSlug
+        : card.publicSlug;
+      const updatedCard: VisitingCard = { ...card, ...cardEditValues, publicSlug };
+      setCard(updatedCard);
+      const updatedQrPath = getCardQrPath(updatedCard);
+      setQrUrl(`${window.location.origin}${updatedQrPath}`);
+      window.history.replaceState(window.history.state, "", updatedQrPath);
+      setCardEditValues(null);
+      if (isEmbeddedPreview) {
+        window.parent.postMessage(
+          { type: "card-preview-edit-state", cardId: card.id, isEditing: false },
+          window.location.origin,
+        );
+      }
+    } catch (err) {
+      setCardEditError(err instanceof Error ? err.message : "Unable to update card-holder details.");
+    } finally {
+      setSavingCardDetails(false);
+    }
+  }
+
+  if (error) return <main className="flex min-h-screen items-center justify-center p-6"><div className="rounded-2xl bg-white p-8 text-center shadow"><h1 className="text-xl font-bold">Card unavailable</h1><p className="mt-2 text-sm text-slate-500">{error}</p></div></main>;
+  if (!card) return <main className="flex min-h-screen items-center justify-center text-sm text-slate-500">Loading digital visiting card...</main>;
+  if (isQrVisit && (!companyPreview || !companyBranding)) return <main className="flex min-h-screen items-center justify-center text-sm text-slate-500">Loading digital visiting card...</main>;
   const formattedMobile = card.mobile.replace(/^(\d{5})(\d{5})$/, "$1 $2");
   const phoneNumber = `${card.countryCode || "+91"} ${formattedMobile}`;
   const phoneHref = `${card.countryCode || "+91"}${card.mobile}`;
   const whatsappNumber = phoneHref.replace(/\D/g, "");
   return (
-    <main className={isQrVisit ? "public-card-page min-h-screen bg-[#f3f6fa] px-3 py-6" : "min-h-screen bg-slate-50 px-4 py-12"}>
+    <main className={isQrVisit ? `public-card-page ${isEmbeddedPreview ? "" : "min-h-screen"} bg-[#f3f6fa] px-3 pb-6 pt-2` : "min-h-screen bg-slate-50 px-4 py-12"}>
       {isPdfLoading && <div role="status" className="fixed inset-0 z-[100] flex items-center justify-center bg-white/85 text-sm font-semibold text-slate-700">
         <LoaderCircle size={20} className="mr-2 animate-spin" aria-hidden="true" /> Preparing your PDF…
       </div>}
       <div className={`public-card-page-content mx-auto ${isQrVisit ? "max-w-[430px]" : "max-w-xl"}`}>
-        {(isQrVisit === false || canReturnToDashboard) && <Link href="/" className="mb-5 inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-blue-600"><ArrowLeft size={16} />Back to dashboard</Link>}
+        {isQrVisit && canReturnToDashboard && !isEmbeddedPreview && (
+          <div className="mb-3 flex gap-2">
+            <button
+              type="button"
+              disabled={savingCardDetails}
+              aria-expanded={Boolean(cardEditValues)}
+              aria-controls="card-holder-edit-form"
+              onClick={() => {
+                if (cardEditValues) {
+                  setCardEditValues(null);
+                  setCardEditErrors({});
+                  setCardEditError("");
+                  return;
+                }
+                setCardEditValues({
+                  fullName: card.fullName,
+                  designation: card.designation,
+                  countryCode: card.countryCode || "+91",
+                  mobile: card.mobile,
+                  email: card.email,
+                  address: card.address,
+                  linkedin: card.linkedin,
+                  linkedinName: card.linkedinName || "",
+                });
+                setCardEditErrors({});
+                setCardEditError("");
+              }}
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
+            >
+              {cardEditValues ? <X size={16} aria-hidden="true" /> : <Pencil size={16} aria-hidden="true" />}
+              {cardEditValues ? "Cancel" : "Edit"}
+            </button>
+          </div>
+        )}
+        {cardEditValues && (
+          <form
+            id="card-holder-edit-form"
+            noValidate
+            onSubmit={(event) => { void saveCardHolderDetails(event); }}
+            className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
+          >
+            <h2 className="mb-4 text-base font-bold text-slate-950">Edit card-holder details</h2>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-sm font-medium text-slate-700">
+                Full name
+                <input required value={cardEditValues.fullName} onChange={(event) => setCardEditValues((current) => current ? { ...current, fullName: event.target.value } : current)} className="mt-1.5 min-h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+                {cardEditErrors.fullName && <span className="mt-1 block text-xs text-red-600">{cardEditErrors.fullName}</span>}
+              </label>
+              <label className="text-sm font-medium text-slate-700">
+                Designation
+                <input required value={cardEditValues.designation} onChange={(event) => setCardEditValues((current) => current ? { ...current, designation: event.target.value } : current)} className="mt-1.5 min-h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+                {cardEditErrors.designation && <span className="mt-1 block text-xs text-red-600">{cardEditErrors.designation}</span>}
+              </label>
+              <label className="text-sm font-medium text-slate-700">
+                Country code
+                <input required value={cardEditValues.countryCode} onChange={(event) => setCardEditValues((current) => current ? { ...current, countryCode: event.target.value } : current)} className="mt-1.5 min-h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+                {cardEditErrors.countryCode && <span className="mt-1 block text-xs text-red-600">{cardEditErrors.countryCode}</span>}
+              </label>
+              <label className="text-sm font-medium text-slate-700">
+                Mobile
+                <input required type="tel" value={cardEditValues.mobile} onChange={(event) => setCardEditValues((current) => current ? { ...current, mobile: event.target.value } : current)} className="mt-1.5 min-h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+                {cardEditErrors.mobile && <span className="mt-1 block text-xs text-red-600">{cardEditErrors.mobile}</span>}
+              </label>
+              <label className="text-sm font-medium text-slate-700 sm:col-span-2">
+                Email
+                <input required type="email" value={cardEditValues.email} onChange={(event) => setCardEditValues((current) => current ? { ...current, email: event.target.value } : current)} className="mt-1.5 min-h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+                {cardEditErrors.email && <span className="mt-1 block text-xs text-red-600">{cardEditErrors.email}</span>}
+              </label>
+              <label className="text-sm font-medium text-slate-700 sm:col-span-2">
+                Address
+                <textarea value={cardEditValues.address} onChange={(event) => setCardEditValues((current) => current ? { ...current, address: event.target.value } : current)} className="mt-1.5 min-h-20 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+                {cardEditErrors.address && <span className="mt-1 block text-xs text-red-600">{cardEditErrors.address}</span>}
+              </label>
+              <label className="text-sm font-medium text-slate-700 sm:col-span-2">
+                LinkedIn profile URL
+                <input type="url" value={cardEditValues.linkedin} onChange={(event) => setCardEditValues((current) => current ? { ...current, linkedin: event.target.value } : current)} className="mt-1.5 min-h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+                {cardEditErrors.linkedin && <span className="mt-1 block text-xs text-red-600">{cardEditErrors.linkedin}</span>}
+              </label>
+              <label className="text-sm font-medium text-slate-700 sm:col-span-2">
+                LinkedIn display name
+                <input value={cardEditValues.linkedinName} onChange={(event) => setCardEditValues((current) => current ? { ...current, linkedinName: event.target.value } : current)} className="mt-1.5 min-h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+                {cardEditErrors.linkedinName && <span className="mt-1 block text-xs text-red-600">{cardEditErrors.linkedinName}</span>}
+              </label>
+            </div>
+            {cardEditError && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{cardEditError}</p>}
+            <div className="mt-4 flex justify-end">
+              <button type="submit" disabled={savingCardDetails} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60">
+                {savingCardDetails && <LoaderCircle size={16} className="animate-spin" aria-hidden="true" />}
+                {savingCardDetails ? "Saving..." : "Save changes"}
+              </button>
+            </div>
+          </form>
+        )}
         {isQrVisit ? (
           <section className="pdf-export-page public-card-cover-pdf relative mx-auto max-w-[430px] overflow-hidden rounded-[18px] border border-slate-200 bg-white shadow-[0_12px_36px_rgba(15,23,42,0.08)]">
             <svg aria-hidden="true" className="pointer-events-none absolute right-0 top-0 h-[100px] w-[56%]" viewBox="0 0 240 112" preserveAspectRatio="none">
@@ -452,7 +685,7 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
             </div>
           </section>
         ) : (
-          <VisitingCardFace {...card} qrUrl={qrUrl} linksClickable />
+          <VisitingCardFace {...card} />
         )}
 
         {isQrVisit === false && <QRCodeDownloads name={card.fullName} value={qrUrl} />}

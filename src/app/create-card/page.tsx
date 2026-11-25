@@ -38,6 +38,7 @@ export default function CreateCardPage() {
   const [editingId, setEditingId] = useState("");
   const [companyLogo, setCompanyLogo] = useState(DEFAULT_COMPANY_LOGO);
   const [companySettingsLoaded, setCompanySettingsLoaded] = useState(false);
+  const [isCanvas, setIsCanvas] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<CardFieldErrors>({});
   const [countryPickerOpen, setCountryPickerOpen] = useState(false);
   const [countrySearch, setCountrySearch] = useState("");
@@ -63,7 +64,9 @@ export default function CreateCardPage() {
 
   useEffect(() => {
     async function loadForm() {
-      const cardId = new URLSearchParams(window.location.search).get("id");
+      const searchParams = new URLSearchParams(window.location.search);
+      const cardId = searchParams.get("id");
+      setIsCanvas(searchParams.get("canvas") === "1");
       if (cardId) {
         setEditingId(cardId);
         setLoadingCard(true);
@@ -186,6 +189,10 @@ export default function CreateCardPage() {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || "Unable to create card.");
+      if (new URLSearchParams(window.location.search).get("canvas") === "1" && window.parent !== window) {
+        window.parent.postMessage({ type: "card-created", success: true }, window.location.origin);
+        return;
+      }
       const cardRouteId = typeof result.publicSlug === "string" ? result.publicSlug : result.id;
       window.location.href = `/card/${encodeURIComponent(cardRouteId)}/view`;
     } catch (err) {
@@ -207,15 +214,15 @@ export default function CreateCardPage() {
   ];
 
   return (
-    <div className="flex min-h-screen flex-col md:flex-row">
-      <Sidebar />
-      <main className="min-w-0 flex-1 p-5 md:p-8 xl:p-10">
-        <div className="create-card-shell mx-auto w-full max-w-4xl">
-          <header className="mb-7">
+    <div className={isCanvas ? "min-h-screen" : "flex min-h-screen flex-col md:flex-row"}>
+      {!isCanvas && <Sidebar />}
+      <main className={isCanvas ? "min-w-0 p-4 sm:p-5" : "min-w-0 flex-1 p-5 md:p-8 xl:p-10"}>
+        <div className={`create-card-shell mx-auto w-full ${isCanvas ? "max-w-2xl" : "max-w-4xl"}`}>
+          {!isCanvas && <header className="mb-5">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700">Card setup</p>
             <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">{editingId ? "Edit card details" : "Create a digital card"}</h1>
             <p className="mt-2 text-sm text-slate-500">{editingId ? "Update the contact details shown on this card." : "Enter contact details to create a digital card and QR code."}</p>
-          </header>
+          </header>}
           <form noValidate onSubmit={submit} className="create-card-form rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_12px_36px_rgba(15,23,42,0.06)] sm:p-6 md:p-8">
             {loadingCard && <p role="status" className="mb-5 rounded-lg bg-blue-50 p-3 text-sm text-blue-700">Loading card details...</p>}
             <div className="mb-6 flex items-start gap-3 border-b border-slate-100 pb-5">
@@ -387,7 +394,7 @@ export default function CreateCardPage() {
               </div>
             </section>
             {error && <p role="alert" className="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-            <div className="mt-8 flex flex-wrap justify-end gap-3 border-t border-slate-100 pt-6"><Link href={editingId ? "/my-cards" : "/"} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancel</Link><button disabled={loading || loadingCard || !companySettingsLoaded} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"><Save size={17} />{loading ? (editingId ? "Saving changes..." : "Creating card...") : (editingId ? "Save changes" : "Create card")}</button></div>
+            <div className="mt-8 flex flex-wrap justify-end gap-3 border-t border-slate-100 pt-6">{isCanvas ? <button type="button" onClick={() => window.parent.postMessage({ type: "close-card-form" }, window.location.origin)} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancel</button> : <Link href={editingId ? "/my-cards" : "/"} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancel</Link>}<button disabled={loading || loadingCard || !companySettingsLoaded} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"><Save size={17} />{loading ? (editingId ? "Saving changes..." : "Creating card...") : (editingId ? "Save changes" : "Create card")}</button></div>
           </form>
         </div>
       </main>

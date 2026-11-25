@@ -55,6 +55,7 @@ type CardRow = {
   preview: CompanyPreviewSettings | null;
   created_at: Date | string;
   company_name: string;
+  company_address: string;
   company_logo: string;
   company_website: string;
   company_preview: CompanyPreviewSettings;
@@ -228,7 +229,7 @@ function cardProjection(db: ReturnType<typeof getDatabase>) {
     c.branch_id, (SELECT b.name FROM branches b WHERE b.id = c.branch_id) AS branch_name,
     c.country_code, c.mobile, c.email, c.address, c.website, c.linkedin,
     c.linkedin_name, c.logo_data AS card_logo, c.is_active, c.preview, c.created_at,
-    co.name AS company_name, co.logo_data AS company_logo,
+    co.name AS company_name, co.address AS company_address, co.logo_data AS company_logo,
     co.website AS company_website, co.preview AS company_preview
   `;
 }
@@ -342,6 +343,21 @@ export async function listCompanies(user: AuthUser): Promise<CompanyRecord[]> {
     SELECT id, name, email, phone, website, logo_data, address, city, state,
            country, description, status, preview
     FROM companies WHERE id = ${user.companyId}
+  `;
+  return rows.map(toCompany);
+}
+
+export async function listAllCompaniesForSuperAdmin(user: AuthUser): Promise<CompanyRecord[]> {
+  if (user.role !== "SUPER_ADMIN") throw new AuthorizationError();
+  if (usesJsonStorage()) {
+    const state = await readJsonPlatform();
+    return [...state.companies].sort((left, right) => left.name.localeCompare(right.name));
+  }
+  const rows = await getDatabase()`
+    SELECT id, name, email, phone, website, logo_data, address, city, state,
+           country, description, status, preview
+    FROM companies
+    ORDER BY lower(name), created_at
   `;
   return rows.map(toCompany);
 }
@@ -1050,6 +1066,25 @@ export async function getCardsForUser(user: AuthUser): Promise<VisitingCard[]> {
   return rows.map((row) => toVisitingCard(row as unknown as CardRow));
 }
 
+export async function getAllCardsForSuperAdmin(user: AuthUser): Promise<VisitingCard[]> {
+  if (user.role !== "SUPER_ADMIN") throw new AuthorizationError();
+  if (usesJsonStorage()) {
+    const state = await readJsonPlatform();
+    return [...state.cards]
+      .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+      .map((card) => getLocalCard(card, state))
+      .filter((card): card is VisitingCard => card !== null);
+  }
+  const db = getDatabase();
+  const rows = await db`
+    SELECT ${cardProjection(db)}
+    FROM cards c
+    JOIN companies co ON co.id = c.company_id
+    ORDER BY c.created_at DESC
+  ` as unknown as CardRow[];
+  return rows.map(toVisitingCard);
+}
+
 export async function getCardForUser(user: AuthUser, id: string): Promise<VisitingCard | null> {
   if (usesJsonStorage()) {
     const state = await readJsonPlatform();
@@ -1121,6 +1156,7 @@ export async function getPublicCard(id: string): Promise<{ card: VisitingCard; c
       card,
       company: {
         companyName: branch?.name ?? company.name,
+        address: branch?.address || company.address,
         website: branch?.website || company.website,
         logoData: branch?.logoData || company.logoData,
         preview: branch?.preview ?? company.preview,
@@ -1150,6 +1186,7 @@ export async function getPublicCard(id: string): Promise<{ card: VisitingCard; c
     card,
     company: {
       companyName: row.company_name,
+      address: row.company_address,
       website: row.company_website,
       logoData: row.company_logo,
       preview: row.company_preview,

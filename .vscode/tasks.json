@@ -40,6 +40,132 @@
 				"build"
 			],
 			"isBackground": false
+		},
+		{
+			"label": "Lint notification component",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"eslint",
+				"src/components/CompanyNotifications.tsx"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$eslint-stylish"
+			]
+		},
+		{
+			"label": "Validate notification visibility",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"eslint",
+				"src/components/CompanyNotifications.tsx",
+				"src/components/SuperAdminDashboard.tsx",
+				"src/app/page.tsx"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$eslint-stylish"
+			]
+		},
+		{
+			"label": "Check bulk import TypeScript",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"tsc",
+				"--noEmit",
+				"--pretty",
+				"false"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			]
+		},
+		{
+			"label": "Parse bulk import syntax",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"-e",
+				"const ts=require('typescript');const fs=require('fs');const p='src/components/ImportContactsBulk.tsx';const s=fs.readFileSync(p,'utf8');const f=ts.createSourceFile(p,s,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);for(const d of f.parseDiagnostics) console.log(d.start+': '+ts.flattenDiagnosticMessageText(d.messageText,' '));"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Read original import route",
+			"type": "shell",
+			"command": "git",
+			"args": [
+				"show",
+				"HEAD:src/app/import-excel/page.tsx"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Lint import component",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"eslint",
+				"src/components/ImportContactsBulk.tsx"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$eslint-stylish"
+			]
+		},
+		{
+			"label": "Check rewritten import TypeScript",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"tsc",
+				"--noEmit",
+				"--pretty",
+				"false"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			]
+		},
+		{
+			"label": "Validate rewritten import",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"tsc",
+				"--noEmit",
+				"--pretty",
+				"false"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			]
+		},
+		{
+			"label": "Run final build validation",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Build visual card app",
+			"type": "shell",
+			"command": "npm run build",
+			"isBackground": false,
+			"problemMatcher": []
 		}
 	]
 }

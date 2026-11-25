@@ -5,6 +5,7 @@ import Sidebar from "@/components/Sidebar";
 import { getActiveCompanyId, requirePageUser } from "@/lib/auth";
 import { getCardsForUser, getCompany, listBranches, listCompanies } from "@/lib/platform-store";
 import MyCardsStatusFilter from "@/components/MyCardsStatusFilter";
+import CreateCardDrawerButton from "@/components/CreateCardDrawerButton";
 
 export const dynamic = "force-dynamic";
 
@@ -120,9 +121,9 @@ export default async function MyCardsPage({ searchParams }: MyCardsPageProps) {
                 </Link>
               )}
               {canCreateCard && (
-                <Link href="/create-card" className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-900/15 hover:-translate-y-0.5 hover:bg-blue-800">
+                <CreateCardDrawerButton className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-900/15 hover:-translate-y-0.5 hover:bg-blue-800">
                   <Plus size={18} />Create card
-                </Link>
+                </CreateCardDrawerButton>
               )}
             </div>
           </header>
@@ -220,7 +221,7 @@ export default async function MyCardsPage({ searchParams }: MyCardsPageProps) {
                     ? "This company does not have any cards yet."
                     : "Create a visiting card to generate its shareable QR code."}
               </p>
-              {canCreateCard && <Link href="/create-card" className="mt-6 inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-800"><Plus size={17} />Create your first card</Link>}
+              {canCreateCard && <CreateCardDrawerButton className="mt-6 inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-800"><Plus size={17} />Create your first card</CreateCardDrawerButton>}
             </div>
           ) : (
             <MyCardsStatusFilter cards={displayedCards} role={user.role} />
