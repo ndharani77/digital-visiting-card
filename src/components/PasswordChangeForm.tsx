@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { LoaderCircle, LockKeyhole } from "lucide-react";
+import { Eye, EyeOff, LoaderCircle, LockKeyhole } from "lucide-react";
 import type { AppLocale } from "@/lib/user-preferences";
 import { translate } from "@/lib/messages";
 
@@ -17,6 +17,11 @@ export default function PasswordChangeForm({
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
+  const [visiblePasswords, setVisiblePasswords] = useState({
+    current: false,
+    new: false,
+    confirmation: false,
+  });
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -67,40 +72,73 @@ export default function PasswordChangeForm({
       <form onSubmit={submit} className="mt-6 grid gap-4 sm:grid-cols-2">
         <label className="text-sm font-medium text-slate-700 sm:col-span-2">
           {t("password.current")}
-          <input
-            type="password"
-            autoComplete="current-password"
-            required
-            value={currentPassword}
-            onChange={(event) => setCurrentPassword(event.target.value)}
-            className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-600"
-          />
+          <div className="relative mt-2">
+            <input
+              type={visiblePasswords.current ? "text" : "password"}
+              autoComplete="current-password"
+              required
+              value={currentPassword}
+              onChange={(event) => setCurrentPassword(event.target.value)}
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 pr-12 outline-none focus:border-blue-600"
+            />
+            <button
+              type="button"
+              aria-label={visiblePasswords.current ? "Hide current password" : "Show current password"}
+              aria-pressed={visiblePasswords.current}
+              onClick={() => setVisiblePasswords((current) => ({ ...current, current: !current.current }))}
+              className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-xl text-slate-500 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600"
+            >
+              {visiblePasswords.current ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+            </button>
+          </div>
         </label>
         <label className="text-sm font-medium text-slate-700">
           {t("password.new")}
-          <input
-            type="password"
-            autoComplete="new-password"
-            minLength={14}
-            maxLength={72}
-            required
-            value={newPassword}
-            onChange={(event) => setNewPassword(event.target.value)}
-            className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-600"
-          />
+          <div className="relative mt-2">
+            <input
+              type={visiblePasswords.new ? "text" : "password"}
+              autoComplete="new-password"
+              minLength={14}
+              maxLength={72}
+              required
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 pr-12 outline-none focus:border-blue-600"
+            />
+            <button
+              type="button"
+              aria-label={visiblePasswords.new ? "Hide new password" : "Show new password"}
+              aria-pressed={visiblePasswords.new}
+              onClick={() => setVisiblePasswords((current) => ({ ...current, new: !current.new }))}
+              className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-xl text-slate-500 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600"
+            >
+              {visiblePasswords.new ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+            </button>
+          </div>
         </label>
         <label className="text-sm font-medium text-slate-700">
           {t("password.confirm")}
-          <input
-            type="password"
-            autoComplete="new-password"
-            minLength={14}
-            maxLength={72}
-            required
-            value={confirmation}
-            onChange={(event) => setConfirmation(event.target.value)}
-            className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-600"
-          />
+          <div className="relative mt-2">
+            <input
+              type={visiblePasswords.confirmation ? "text" : "password"}
+              autoComplete="new-password"
+              minLength={14}
+              maxLength={72}
+              required
+              value={confirmation}
+              onChange={(event) => setConfirmation(event.target.value)}
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 pr-12 outline-none focus:border-blue-600"
+            />
+            <button
+              type="button"
+              aria-label={visiblePasswords.confirmation ? "Hide confirmation password" : "Show confirmation password"}
+              aria-pressed={visiblePasswords.confirmation}
+              onClick={() => setVisiblePasswords((current) => ({ ...current, confirmation: !current.confirmation }))}
+              className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-xl text-slate-500 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600"
+            >
+              {visiblePasswords.confirmation ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+            </button>
+          </div>
         </label>
         <button
           type="submit"

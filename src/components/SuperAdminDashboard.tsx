@@ -15,13 +15,11 @@ import {
 } from "lucide-react";
 import CompanyNotifications from "@/components/CompanyNotifications";
 import Sidebar from "@/components/Sidebar";
-import DashboardCardSearch from "@/components/DashboardCardSearch";
 import type {
   ActivityLogOverview,
   CompanyRecord,
   PlatformStatistics,
 } from "@/lib/platform-store";
-import type { VisitingCard } from "@/lib/types";
 import type { AppLocale } from "@/lib/user-preferences";
 
 type SuperAdminDashboardProps = {
@@ -29,7 +27,6 @@ type SuperAdminDashboardProps = {
   companies: CompanyRecord[];
   analytics: PlatformStatistics;
   activities: ActivityLogOverview[];
-  cards: VisitingCard[];
 };
 
 type RecentActivity = {
@@ -195,7 +192,6 @@ export default function SuperAdminDashboard({
   companies,
   analytics,
   activities,
-  cards,
 }: SuperAdminDashboardProps) {
   const numberFormat = new Intl.NumberFormat(locale);
   const recentActivities = getRecentActivities(activities);
@@ -266,14 +262,6 @@ export default function SuperAdminDashboard({
               </article>
             ))}
           </section>
-
-          <DashboardCardSearch
-            cards={cards}
-            role="SUPER_ADMIN"
-            canCreateCard={false}
-            scopeLabel="All companies"
-            hasCompanySelected={false}
-          />
 
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(300px,0.9fr)]">
             <section aria-labelledby="company-overview-title" className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm xl:col-span-3">

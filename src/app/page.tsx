@@ -23,7 +23,6 @@ import { getActiveCompanyId, requirePageUser } from "@/lib/auth";
 import { getCardQrPath } from "@/lib/card-slug";
 import {
   getActivityLogsForUser,
-  getAllCardsForSuperAdmin,
   getCardsForUser,
   getCompany,
   getPlatformStatistics,
@@ -59,11 +58,10 @@ export default async function Dashboard() {
   const user = await requirePageUser("/");
   const activeCompanyId = await getActiveCompanyId(user);
   if (user.role === "SUPER_ADMIN" && !activeCompanyId) {
-    const [analytics, companies, activities, cards] = await Promise.all([
+    const [analytics, companies, activities] = await Promise.all([
       getPlatformStatistics(user),
       listCompanies(user),
       getActivityLogsForUser(user),
-      getAllCardsForSuperAdmin(user),
     ]);
     return (
       <SuperAdminDashboard
@@ -71,7 +69,6 @@ export default async function Dashboard() {
         companies={companies}
         analytics={analytics}
         activities={activities}
-        cards={cards}
       />
     );
   }
