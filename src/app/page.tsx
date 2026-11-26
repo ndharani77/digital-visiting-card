@@ -210,7 +210,7 @@ export default async function Dashboard() {
       ]
     : isCompanyAdmin
       ? [
-          { href: "/create-card", label: "Create team card", icon: Plus, primary: true },
+          { href: "/create-card", label: "Create card", icon: Plus, primary: true },
           { href: "/bulk-management", label: "Import / export", icon: Upload },
         ]
       : cards[0]
