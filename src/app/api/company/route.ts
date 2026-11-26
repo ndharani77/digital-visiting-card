@@ -5,6 +5,7 @@ import { getCompanySettings, saveCompanySettings } from "@/lib/platform-store";
 import { validateCardField } from "@/lib/card-validation";
 import { isCompanyPreviewSettings } from "@/lib/company-content";
 import { isCardAppearance, isCompanyTheme } from "@/lib/company-theme";
+import { isCompanyLocations } from "@/lib/company-settings";
 
 export const runtime = "nodejs";
 
@@ -46,6 +47,15 @@ export async function PUT(request: Request) {
     const address = typeof data.address === "string" ? data.address.trim() : data.address === undefined ? current.address : data.address;
     const website = typeof data.website === "string" ? data.website.trim() : data.website === undefined ? current.website : data.website;
     const logoData = typeof data.logoData === "string" ? data.logoData.trim() : data.logoData === undefined ? current.logoData : data.logoData;
+    const locations = data.locations === undefined
+      ? current.locations
+      : isCompanyLocations(data.locations)
+        ? data.locations.map((location) => ({
+            id: location.id.trim(),
+            name: location.name.trim(),
+            officeLocation: location.officeLocation.trim(),
+          }))
+        : data.locations;
     const preview = data.preview === undefined ? current.preview : data.preview;
     const theme = data.theme === undefined ? current.theme : data.theme;
     const cardAppearance = data.cardAppearance === undefined ? current.cardAppearance : data.cardAppearance;
@@ -54,6 +64,13 @@ export async function PUT(request: Request) {
       address: validateCardField("address", address),
       website: typeof website === "string" ? validateCardField("website", website) : "Website is required.",
       logoData: typeof logoData === "string" ? validateCardField("logoData", logoData) : "Choose a company logo.",
+      locations: isCompanyLocations(locations) && locations.length <= 100 &&
+        locations.every((location) => location.id.trim().length > 0 && location.id.length <= 100 &&
+          location.name.trim().length > 0 && location.name.length <= 100 &&
+          location.officeLocation.trim().length > 0 && location.officeLocation.length <= 250) &&
+        new Set(locations.map((location) => location.id)).size === locations.length
+        ? undefined
+        : "Each location needs a unique ID, name, and office location within the allowed length.",
       preview: isCompanyPreviewSettings(preview) ? undefined : "Preview details are invalid.",
       theme: isCompanyTheme(theme) ? undefined : "Choose a valid company theme.",
       cardAppearance: isCardAppearance(cardAppearance) ? undefined : "Choose a valid card appearance.",
@@ -65,7 +82,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ message: Object.values(invalidFields)[0], errors: invalidFields }, { status: 400 });
     }
     if (typeof companyName !== "string" || typeof address !== "string" || typeof website !== "string" ||
-        typeof logoData !== "string" || !isCompanyPreviewSettings(preview) ||
+        typeof logoData !== "string" || !isCompanyLocations(locations) || !isCompanyPreviewSettings(preview) ||
         !isCompanyTheme(theme) || !isCardAppearance(cardAppearance)) {
       return NextResponse.json({ message: "Invalid company settings." }, { status: 400 });
     }
@@ -74,6 +91,7 @@ export async function PUT(request: Request) {
       address,
       website,
       logoData,
+      locations,
       preview,
       theme,
       cardAppearance,

@@ -96,13 +96,14 @@ try {
 
     await transaction`
       INSERT INTO companies (
-        id, name, website, logo_data, preview
+        id, name, website, logo_data, preview, locations
       ) VALUES (
         ${companyId},
         ${companyName},
         ${String(settings.website ?? "")},
         ${String(settings.logoData ?? "")},
-        ${JSON.stringify(settings.preview ?? {})}::jsonb
+        ${JSON.stringify(settings.preview ?? {})}::jsonb,
+        ${JSON.stringify(settings.locations ?? [])}::jsonb
       )
       ON CONFLICT (id) DO NOTHING
     `;

@@ -1,5 +1,5 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { createCardSlug, createUniqueCardSlug } from "@/lib/card-slug";
 import { createDefaultCompanyPreview, type CompanyPreviewSettings } from "@/lib/company-content";
 import { DEFAULT_CARD_ACCENT, DEFAULT_CARD_BACKGROUND } from "@/lib/card-defaults";
@@ -32,7 +32,12 @@ import {
   type JsonEmployee,
   type JsonPlatformState,
 } from "@/lib/json-store";
-import type { CompanySettings } from "@/lib/company-settings";
+import {
+  getDefaultCompanyLocations,
+  normalizeCompanyLocations,
+  type CompanyLocation,
+  type CompanySettings,
+} from "@/lib/company-settings";
 import type { VisitingCard } from "@/lib/types";
 
 type CardRow = {
@@ -75,6 +80,9 @@ export type CompanyRecord = {
   description: string;
   status: "active" | "inactive";
   branchEnabled: boolean;
+  locations: CompanyLocation[];
+  locationsInitialized?: boolean;
+  locationsVersion?: number;
   preview: CompanyPreviewSettings;
   theme: CompanyTheme;
   cardAppearance: CardAppearance;
@@ -83,7 +91,7 @@ export type CompanyRecord = {
 export type CompanyInput = Pick<
   CompanyRecord,
   "name" | "email" | "phone" | "website" | "address" | "city" | "state" | "country" | "description" | "status"
-> & { logoData?: string; branchEnabled?: boolean; preview?: CompanyPreviewSettings; theme?: CompanyTheme; cardAppearance?: CardAppearance };
+> & { logoData?: string; branchEnabled?: boolean; locations?: CompanyLocation[]; locationsInitialized?: boolean; locationsVersion?: number; preview?: CompanyPreviewSettings; theme?: CompanyTheme; cardAppearance?: CardAppearance };
 
 export type BranchRecord = {
   id: string;
@@ -168,6 +176,11 @@ export type ActivityLogOverview = {
   entityType: string;
   entityId: string;
   createdAt: string;
+};
+
+export type PublicCardFormSettings = Pick<CompanySettings, "companyName" | "website" | "logoData" | "locations">;
+type NewCardInput = Omit<VisitingCard, "id" | "publicSlug" | "createdAt" | "isActive" | "preview" | "branchName" | "branchId"> & {
+  branchId?: string | null;
 };
 
 export class BranchAssignmentError extends Error {
@@ -302,6 +315,7 @@ function toCompany(row: Record<string, unknown>): CompanyRecord {
     description: String(row.description ?? ""),
     status: row.status === "inactive" ? "inactive" : "active",
     branchEnabled: row.branch_enabled === true,
+    locations: normalizeCompanyLocations(row.locations),
     preview: (row.preview ?? {}) as CompanyPreviewSettings,
     theme: normalizeCompanyTheme(row.theme),
     cardAppearance: normalizeCardAppearance(row.card_appearance),
@@ -324,7 +338,7 @@ export async function listCompanies(user: AuthUser): Promise<CompanyRecord[]> {
     if (activeCompanyId) {
       const rows = await db`
         SELECT id, name, email, phone, website, logo_data, address, city, state,
-               country, description, status, preview
+               country, description, status, preview, locations
         FROM companies
         WHERE id = ${activeCompanyId}
       `;
@@ -332,7 +346,7 @@ export async function listCompanies(user: AuthUser): Promise<CompanyRecord[]> {
     }
     const rows = await db`
       SELECT id, name, email, phone, website, logo_data, address, city, state,
-             country, description, status, preview
+             country, description, status, preview, locations
       FROM companies
       ORDER BY lower(name), created_at
     `;
@@ -341,7 +355,7 @@ export async function listCompanies(user: AuthUser): Promise<CompanyRecord[]> {
   if (!user.companyId) return [];
   const rows = await db`
     SELECT id, name, email, phone, website, logo_data, address, city, state,
-           country, description, status, preview
+           country, description, status, preview, locations
     FROM companies WHERE id = ${user.companyId}
   `;
   return rows.map(toCompany);
@@ -355,7 +369,7 @@ export async function listAllCompaniesForSuperAdmin(user: AuthUser): Promise<Com
   }
   const rows = await getDatabase()`
     SELECT id, name, email, phone, website, logo_data, address, city, state,
-           country, description, status, preview
+           country, description, status, preview, locations
     FROM companies
     ORDER BY lower(name), created_at
   `;
@@ -775,6 +789,7 @@ export async function getCompany(user: AuthUser, companyId?: string | null): Pro
         description: branch.description,
         status: branch.status,
         branchEnabled: false,
+        locations: [],
         preview: branch.preview,
         theme: branch.theme,
         cardAppearance: branch.cardAppearance,
@@ -785,7 +800,7 @@ export async function getCompany(user: AuthUser, companyId?: string | null): Pro
 
   const rows = await getDatabase()`
     SELECT id, name, email, phone, website, logo_data, address, city, state,
-           country, description, status, preview
+           country, description, status, preview, locations
     FROM companies WHERE id = ${id}
   `;
   return rows[0] ? toCompany(rows[0]) : null;
@@ -798,6 +813,9 @@ export async function createCompany(user: AuthUser, input: CompanyInput): Promis
       ...input,
       logoData: input.logoData ?? "",
       branchEnabled: input.branchEnabled ?? false,
+      locations: input.locations ?? getDefaultCompanyLocations(input.name),
+      locationsInitialized: true,
+      locationsVersion: 1,
       preview: input.preview ?? createDefaultCompanyPreview(input.name),
       theme: input.theme ?? DEFAULT_COMPANY_THEME,
       cardAppearance: input.cardAppearance ?? DEFAULT_CARD_APPEARANCE,
@@ -813,15 +831,16 @@ export async function createCompany(user: AuthUser, input: CompanyInput): Promis
   const rows = await getDatabase()`
     INSERT INTO companies (
       id, name, email, phone, website, logo_data, address, city, state,
-      country, description, status, preview
+      country, description, status, preview, locations
     ) VALUES (
       ${id}, ${input.name}, ${input.email}, ${input.phone}, ${input.website},
       ${input.logoData ?? ""}, ${input.address}, ${input.city}, ${input.state},
       ${input.country}, ${input.description}, ${input.status},
-      ${JSON.stringify(input.preview ?? createDefaultCompanyPreview(input.name))}::jsonb
+      ${JSON.stringify(input.preview ?? createDefaultCompanyPreview(input.name))}::jsonb,
+      ${JSON.stringify(input.locations ?? [])}::jsonb
     )
     RETURNING id, name, email, phone, website, logo_data, address, city, state,
-              country, description, status, preview
+              country, description, status, preview, locations
   `;
   return toCompany(rows[0]);
 }
@@ -842,6 +861,9 @@ export async function createCompanyWithAdmin(
         ...input,
         logoData: input.logoData ?? "",
         branchEnabled: input.branchEnabled ?? false,
+        locations: input.locations ?? getDefaultCompanyLocations(input.name),
+        locationsInitialized: true,
+        locationsVersion: 1,
         preview: input.preview ?? createDefaultCompanyPreview(input.name),
         theme: input.theme ?? DEFAULT_COMPANY_THEME,
         cardAppearance: input.cardAppearance ?? DEFAULT_CARD_APPEARANCE,
@@ -877,15 +899,16 @@ export async function createCompanyWithAdmin(
     const rows = await transaction`
       INSERT INTO companies (
         id, name, email, phone, website, logo_data, address, city, state,
-        country, description, status, preview
+        country, description, status, preview, locations
       ) VALUES (
         ${companyId}, ${input.name}, ${input.email}, ${input.phone}, ${input.website},
         ${input.logoData ?? ""}, ${input.address}, ${input.city}, ${input.state},
         ${input.country}, ${input.description}, ${input.status},
-        ${JSON.stringify(input.preview ?? createDefaultCompanyPreview(input.name))}::jsonb
+        ${JSON.stringify(input.preview ?? createDefaultCompanyPreview(input.name))}::jsonb,
+        ${JSON.stringify(input.locations ?? [])}::jsonb
       )
       RETURNING id, name, email, phone, website, logo_data, address, city, state,
-                country, description, status, preview
+                country, description, status, preview, locations
     `;
     await transaction`
       INSERT INTO users (
@@ -948,10 +971,11 @@ export async function updateCompany(
       description = coalesce(${input.description ?? null}, description),
       status = coalesce(${input.status ?? null}, status),
       preview = coalesce(${input.preview ? JSON.stringify(input.preview) : null}::jsonb, preview),
+      locations = coalesce(${input.locations ? JSON.stringify(input.locations) : null}::jsonb, locations),
       updated_at = now()
     WHERE id = ${companyId}
     RETURNING id, name, email, phone, website, logo_data, address, city, state,
-              country, description, status, preview
+              country, description, status, preview, locations
   `;
   return rows[0] ? toCompany(rows[0]) : null;
 }
@@ -964,9 +988,106 @@ export async function getCompanySettings(user: AuthUser, companyId?: string | nu
     address: company.address,
     website: company.website,
     logoData: company.logoData,
+    locations: company.locations ?? [],
     preview: company.preview,
     theme: normalizeCompanyTheme(company.theme),
     cardAppearance: normalizeCardAppearance(company.cardAppearance),
+  };
+}
+
+export async function getOrCreatePublicCardFormIdentifier(user: AuthUser): Promise<string> {
+  requireCompanyAdmin(user);
+  const companyId = await getSelectedCompany(user);
+  if (!canManageCompany(user, companyId)) throw new AuthorizationError("You cannot manage this company.");
+
+  if (usesJsonStorage()) {
+    const identifier = await updateJsonPlatform((state) => {
+      const company = state.companies.find((item) => item.id === companyId && item.status === "active");
+      if (!company) return "";
+      const currentIdentifier = state.publicCardFormIds?.[companyId];
+      if (
+        currentIdentifier &&
+        /^[A-Za-z0-9_-]{16}$/.test(currentIdentifier) &&
+        state.publicCardFormTokenHashes?.[companyId] === createHash("sha256").update(currentIdentifier).digest("hex")
+      ) {
+        return currentIdentifier;
+      }
+      const newIdentifier = randomBytes(12).toString("base64url");
+      state.publicCardFormTokenHashes ??= {};
+      state.publicCardFormTokenHashes[companyId] = createHash("sha256").update(newIdentifier).digest("hex");
+      state.publicCardFormIds ??= {};
+      state.publicCardFormIds[companyId] = newIdentifier;
+      return newIdentifier;
+    });
+    if (!identifier) throw new Error("Company not found or inactive.");
+    return identifier;
+  }
+
+  const identifier = randomBytes(12).toString("base64url");
+  const tokenHash = createHash("sha256").update(identifier).digest("hex");
+  const rows = await getDatabase()`
+    UPDATE companies
+    SET public_card_form_id = CASE
+          WHEN public_card_form_id IS NULL OR public_card_form_token_hash IS NULL THEN ${identifier}
+          ELSE public_card_form_id
+        END,
+        public_card_form_token_hash = CASE
+          WHEN public_card_form_id IS NULL OR public_card_form_token_hash IS NULL THEN ${tokenHash}
+          ELSE public_card_form_token_hash
+        END,
+        updated_at = now()
+    WHERE id = ${companyId} AND status = 'active'
+    RETURNING public_card_form_id
+  `;
+  if (!rows[0]) throw new Error("Company not found or inactive.");
+  return String(rows[0].public_card_form_id);
+}
+
+async function findPublicCardFormCompany(identifier: string): Promise<{
+  id: string;
+  name: string;
+  website: string;
+  logoData: string;
+  locations: CompanyLocation[];
+} | null> {
+  if (!/^(?:[a-f0-9]{64}|[A-Za-z0-9_-]{16})$/i.test(identifier)) return null;
+  const tokenHash = createHash("sha256").update(identifier).digest("hex");
+  if (usesJsonStorage()) {
+    const state = await readJsonPlatform();
+    const company = state.companies.find((item) =>
+      item.status === "active" && state.publicCardFormTokenHashes?.[item.id] === tokenHash
+    );
+    return company ? {
+      id: company.id,
+      name: company.name,
+      website: company.website,
+      logoData: company.logoData,
+      locations: company.locations ?? [],
+    } : null;
+  }
+
+  const [company] = await getDatabase()`
+    SELECT id, name, website, logo_data, locations
+    FROM companies
+    WHERE public_card_form_token_hash = ${tokenHash} AND status = 'active'
+  `;
+  return company ? {
+    id: String(company.id),
+    name: String(company.name),
+    website: String(company.website ?? ""),
+    logoData: String(company.logo_data ?? ""),
+    locations: normalizeCompanyLocations(company.locations),
+  } : null;
+}
+
+export async function getPublicCardFormSettings(identifier: string): Promise<PublicCardFormSettings | null> {
+  const company = await findPublicCardFormCompany(identifier);
+  if (!company) return null;
+  return {
+    companyName: company.name,
+    website: company.website,
+    logoData: company.logoData,
+    locations: company.locations,
   };
 }
 
@@ -989,6 +1110,9 @@ export async function saveCompanySettings(
         address: settings.address,
         website: settings.website,
         logoData: settings.logoData,
+        locations: settings.locations,
+        locationsInitialized: true,
+        locationsVersion: 1,
         preview: settings.preview,
         theme: settings.theme,
         cardAppearance: settings.cardAppearance,
@@ -1005,6 +1129,7 @@ export async function saveCompanySettings(
     address: settings.address,
     website: settings.website,
     logoData: settings.logoData,
+    locations: settings.locations,
     preview: settings.preview,
     theme: settings.theme,
     cardAppearance: settings.cardAppearance,
@@ -1159,6 +1284,7 @@ export async function getPublicCard(id: string): Promise<{ card: VisitingCard; c
         address: branch?.address || company.address,
         website: branch?.website || company.website,
         logoData: branch?.logoData || company.logoData,
+        locations: [],
         preview: branch?.preview ?? company.preview,
         theme: normalizeCompanyTheme(branch?.theme ?? company.theme),
         cardAppearance: normalizeCardAppearance(branch?.cardAppearance ?? company.cardAppearance),
@@ -1189,6 +1315,7 @@ export async function getPublicCard(id: string): Promise<{ card: VisitingCard; c
       address: row.company_address,
       website: row.company_website,
       logoData: row.company_logo,
+      locations: [],
       preview: row.company_preview,
       theme: DEFAULT_COMPANY_THEME,
       cardAppearance: DEFAULT_CARD_APPEARANCE,
@@ -1198,9 +1325,8 @@ export async function getPublicCard(id: string): Promise<{ card: VisitingCard; c
 
 export async function createCardForUser(
   user: AuthUser,
-  input: Omit<VisitingCard, "id" | "publicSlug" | "createdAt" | "isActive" | "preview" | "branchName" | "branchId"> & {
-    branchId?: string | null;
-  }
+  input: NewCardInput,
+  logActivity = true
 ): Promise<VisitingCard> {
   requireCompanyAdmin(user);
   const companyId = await getSelectedCompany(user);
@@ -1250,8 +1376,10 @@ export async function createCardForUser(
       refreshCardPublicSlug(state, card, card.fullName, branch?.name ?? company.name);
       state.employees.push(employee);
       state.cards.unshift(card);
-      recordActivity(state, user, companyId, "created", "employee", employeeId);
-      recordActivity(state, user, companyId, "created", "card", card.id);
+      if (logActivity) {
+        recordActivity(state, user, companyId, "created", "employee", employeeId);
+        recordActivity(state, user, companyId, "created", "card", card.id);
+      }
       return card;
     });
   }
@@ -1293,6 +1421,32 @@ export async function createCardForUser(
   const card = await getCardForUser(user, cardId);
   if (!card) throw new Error("Created card could not be loaded.");
   return card;
+}
+
+export async function createCardFromPublicForm(
+  identifier: string,
+  input: NewCardInput
+): Promise<VisitingCard | null> {
+  const company = await findPublicCardFormCompany(identifier);
+  if (!company) return null;
+
+  const publicFormUser: AuthUser = {
+    id: "public-card-form",
+    email: "public-card-form",
+    role: "COMPANY_ADMIN",
+    companyId: company.id,
+    branchId: null,
+    employeeId: null,
+    mustChangePassword: false,
+    locale: "en",
+  };
+  return createCardForUser(publicFormUser, {
+    ...input,
+    company: company.name,
+    website: company.website,
+    logoData: input.logoData || company.logoData,
+    branchId: null,
+  }, false);
 }
 
 export async function updateCardForUser(
@@ -1463,6 +1617,42 @@ export async function setCardPreviewForUser(
       AND employee_id = ${employeeId}
   `;
   return getCardForUser(user, id);
+}
+
+export async function applyCompanyPreviewToCards(user: AuthUser): Promise<number> {
+  requireCompanyAdmin(user);
+  if (user.branchId) {
+    throw new AuthorizationError("Only Company Admins can apply preview settings to all company cards.");
+  }
+  const companyId = await getSelectedCompany(user);
+  if (!canManageCompany(user, companyId)) {
+    throw new AuthorizationError("You cannot manage this company.");
+  }
+
+  if (usesJsonStorage()) {
+    return updateJsonPlatform((state) => {
+      const company = state.companies.find((item) => item.id === companyId);
+      if (!company) throw new Error("Company not found.");
+      const cards = state.cards.filter((card) => card.companyId === companyId);
+      for (const card of cards) card.preview = company.preview;
+      if (cards.length > 0) {
+        recordActivity(state, user, companyId, "applied-preview-to-cards", "company", companyId);
+      }
+      return cards.length;
+    });
+  }
+
+  const db = getDatabase();
+  const [company] = await db`SELECT id FROM companies WHERE id = ${companyId}`;
+  if (!company) throw new Error("Company not found.");
+  const cards = await db`
+    UPDATE cards
+    SET preview = companies.preview
+    FROM companies
+    WHERE cards.company_id = companies.id AND companies.id = ${companyId}
+    RETURNING cards.id
+  `;
+  return cards.length;
 }
 
 export async function deleteCardForUser(user: AuthUser, id: string): Promise<boolean> {

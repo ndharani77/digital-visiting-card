@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, type FormEvent, type ChangeEvent } from "react";
-import { Building2, Crop, Globe, ImagePlus, MapPin, Save } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent, type ChangeEvent } from "react";
+import { Building2, Crop, Globe, ImagePlus, Save } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import CompanyPreviewDetailsEditor from "@/components/CompanyPreviewDetailsEditor";
 import { DEFAULT_COMPANY, DEFAULT_COMPANY_LOGO, DEFAULT_WEBSITE } from "@/lib/card-defaults";
@@ -15,12 +15,26 @@ const initialSettings: CompanySettings = {
   address: "",
   website: DEFAULT_WEBSITE,
   logoData: DEFAULT_COMPANY_LOGO,
+  locations: [],
   preview: DEFAULT_COMPANY_PREVIEW,
   theme: DEFAULT_COMPANY_THEME,
   cardAppearance: DEFAULT_CARD_APPEARANCE,
 };
 
 function isCompanySettings(value: unknown): value is CompanySettings {
+  const locationsAreValid = (locations: unknown): locations is CompanySettings["locations"] =>
+    Array.isArray(locations) && locations.every((location) =>
+      Boolean(
+        location &&
+        typeof location === "object" &&
+        "id" in location &&
+        typeof location.id === "string" &&
+        "name" in location &&
+        typeof location.name === "string" &&
+        "officeLocation" in location &&
+        typeof location.officeLocation === "string"
+      )
+    );
   return Boolean(
     value &&
     typeof value === "object" &&
@@ -32,6 +46,8 @@ function isCompanySettings(value: unknown): value is CompanySettings {
     typeof value.website === "string" &&
     "logoData" in value &&
     typeof value.logoData === "string" &&
+    "locations" in value &&
+    locationsAreValid(value.locations) &&
     "theme" in value &&
     isCompanyTheme(value.theme) &&
     "cardAppearance" in value &&
@@ -56,10 +72,20 @@ export default function CompanyPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [cropSource, setCropSource] = useState("");
+  const locationIdSequence = useRef(0);
+  const [newLocationId, setNewLocationId] = useState("");
+  const newLocationNameRef = useRef<HTMLInputElement>(null);
+  const [showAllLocations, setShowAllLocations] = useState(false);
 
   useEffect(() => {
     setActiveSection(new URLSearchParams(window.location.search).get("tab") === "preview" ? "preview" : "profile");
   }, []);
+
+  useEffect(() => {
+    if (!newLocationId || !settings.locations.some((location) => location.id === newLocationId)) return;
+    newLocationNameRef.current?.focus();
+    setNewLocationId("");
+  }, [newLocationId, settings.locations]);
 
   useEffect(() => {
     fetch("/api/company")
@@ -124,12 +150,38 @@ export default function CompanyPage() {
       if (!response.ok) throw new Error(responseMessage(result, "Unable to save company settings."));
       if (!isCompanySettings(result)) throw new Error("Company settings response is invalid.");
       setSettings(result);
-      setMessage("Company settings saved. New cards will use this address and logo by default.");
+      setMessage("Company settings saved.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save company settings.");
     } finally {
       setSaving(false);
     }
+  }
+
+  function updateLocation(id: string, field: "name" | "officeLocation", value: string) {
+    setSettings((current) => ({
+      ...current,
+      locations: current.locations.map((location) =>
+        location.id === id ? { ...location, [field]: value } : location
+      ),
+    }));
+  }
+
+  function addLocation() {
+    const id = `location-${Date.now()}-${locationIdSequence.current++}`;
+    setSettings((current) => ({
+      ...current,
+      locations: [{ id, name: "", officeLocation: "" }, ...current.locations],
+    }));
+    setNewLocationId(id);
+    setShowAllLocations(true);
+  }
+
+  function removeLocation(id: string) {
+    setSettings((current) => ({
+      ...current,
+      locations: current.locations.filter((location) => location.id !== id),
+    }));
   }
 
   function selectSection(section: "profile" | "preview") {
@@ -139,6 +191,8 @@ export default function CompanyPage() {
     else url.searchParams.delete("tab");
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}`);
   }
+
+  const visibleLocations = showAllLocations ? settings.locations : settings.locations.slice(0, 3);
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
@@ -201,20 +255,73 @@ export default function CompanyPage() {
                 </div>
               </label>
 
-              <label>
-                <span className="mb-2 block text-sm font-semibold text-slate-700">Company address</span>
-                <div className="flex items-start rounded-xl border border-slate-200 bg-slate-50 px-3 focus-within:border-blue-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-blue-500/10">
-                  <MapPin size={17} className="mt-3 shrink-0 text-slate-400" />
-                  <textarea
-                    maxLength={250}
-                    rows={3}
-                    value={settings.address}
-                    onChange={(event) => setSettings((current) => ({ ...current, address: event.target.value }))}
-                    className="w-full resize-y bg-transparent px-3 py-3 text-sm outline-none"
-                  />
+              <section aria-labelledby="company-locations-heading" className="space-y-4 rounded-xl border border-slate-200 p-4 sm:p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 id="company-locations-heading" className="text-sm font-semibold text-slate-800">Locations</h2>
+                    <p className="mt-1 text-xs text-slate-500">Add office locations for selection when creating a card.</p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!loaded || saving}
+                    onClick={addLocation}
+                    className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                  >
+                    Add location
+                  </button>
                 </div>
-                <span className="mt-1 block text-xs text-slate-500">Used as the default address on new cards. You can change it on each card.</span>
-              </label>
+                {settings.locations.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500">No locations added yet.</p>
+                ) : visibleLocations.map((location, index) => (
+                  <div key={location.id} className="grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto] sm:items-end">
+                    <label className="text-sm font-medium text-slate-700">
+                      Location name
+                      <input
+                        ref={location.id === newLocationId ? newLocationNameRef : undefined}
+                        required
+                        maxLength={100}
+                        value={location.name}
+                        onChange={(event) => updateLocation(location.id, "name", event.target.value)}
+                        disabled={!loaded || saving}
+                        className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm"
+                        aria-label={`Location ${index + 1} name`}
+                      />
+                    </label>
+                    <label className="text-sm font-medium text-slate-700">
+                      Office location
+                      <textarea
+                        required
+                        maxLength={250}
+                        rows={3}
+                        value={location.officeLocation}
+                        onChange={(event) => updateLocation(location.id, "officeLocation", event.target.value)}
+                        disabled={!loaded || saving}
+                        className="mt-1.5 w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm"
+                        aria-label={`Location ${index + 1} office location`}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      disabled={!loaded || saving}
+                      onClick={() => removeLocation(location.id)}
+                      className="rounded-lg px-3 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                      aria-label={`Remove location ${index + 1}`}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                {settings.locations.length > 3 && (
+                  <button
+                    type="button"
+                    aria-expanded={showAllLocations}
+                    onClick={() => setShowAllLocations((current) => !current)}
+                    className="rounded-lg px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+                  >
+                    {showAllLocations ? "Show less" : `Show more (${settings.locations.length - 3})`}
+                  </button>
+                )}
+              </section>
 
               <label>
                 <span className="mb-2 block text-sm font-semibold text-slate-700">Website</span>

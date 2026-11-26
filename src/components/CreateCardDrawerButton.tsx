@@ -54,7 +54,7 @@ export default function CreateCardDrawerButton({
         {children}
       </button>
       {open && (
-        <div className="fixed inset-0 z-[80] flex justify-end bg-slate-950/45">
+        <div className="fixed inset-0 z-[110] flex justify-end bg-slate-950/45">
           <button
             type="button"
             aria-label="Close card form"

@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { Fragment, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Building2, Globe, Mail, MapPin, Phone, UserRound, Linkedin, Save } from "lucide-react";
+import { Building2, Globe, Mail, MapPin, Phone, UserRound, Linkedin, Save, Share2 } from "lucide-react";
 import { getCountries, getCountryCallingCode } from "libphonenumber-js";
 import Sidebar from "@/components/Sidebar";
 import { validateCardField, validateCardFields, type CardField, type CardFieldErrors } from "@/lib/card-validation";
+import VisitingCardFace from "@/components/VisitingCardFace";
 import {
   DEFAULT_CARD_ACCENT,
   DEFAULT_CARD_BACKGROUND,
@@ -14,6 +15,7 @@ import {
   DEFAULT_COMPANY_LOGO,
   DEFAULT_WEBSITE,
 } from "@/lib/card-defaults";
+import type { CompanyLocation } from "@/lib/company-settings";
 
 const countryNames = new Intl.DisplayNames(["en"], { type: "region" });
 const countryCodes = getCountries()
@@ -30,6 +32,40 @@ const initialForm = {
   backgroundColor: DEFAULT_CARD_BACKGROUND, accentColor: DEFAULT_CARD_ACCENT,
 };
 
+function isCompanyLocation(value: unknown): value is CompanyLocation {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    "id" in value &&
+    typeof value.id === "string" &&
+    "name" in value &&
+    typeof value.name === "string" &&
+    "officeLocation" in value &&
+    typeof value.officeLocation === "string"
+  );
+}
+
+function isPublicCardFormSettings(value: unknown): value is {
+  companyName: string;
+  website: string;
+  logoData: string;
+  locations: CompanyLocation[];
+} {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    "companyName" in value &&
+    typeof value.companyName === "string" &&
+    "website" in value &&
+    typeof value.website === "string" &&
+    "logoData" in value &&
+    typeof value.logoData === "string" &&
+    "locations" in value &&
+    Array.isArray(value.locations) &&
+    value.locations.every(isCompanyLocation)
+  );
+}
+
 export default function CreateCardPage() {
   const [form, setForm] = useState(initialForm);
   const [error, setError] = useState("");
@@ -37,8 +73,18 @@ export default function CreateCardPage() {
   const [loadingCard, setLoadingCard] = useState(false);
   const [editingId, setEditingId] = useState("");
   const [companyLogo, setCompanyLogo] = useState(DEFAULT_COMPANY_LOGO);
+  const [locations, setLocations] = useState<CompanyLocation[]>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState("");
   const [companySettingsLoaded, setCompanySettingsLoaded] = useState(false);
   const [isCanvas, setIsCanvas] = useState(false);
+  const [routeModeResolved, setRouteModeResolved] = useState(false);
+  const [publicFormIdentifier, setPublicFormIdentifier] = useState("");
+  const [showPublicPreview, setShowPublicPreview] = useState(false);
+  const [publicCardCreated, setPublicCardCreated] = useState(false);
+  const [canGenerateFormLink, setCanGenerateFormLink] = useState(false);
+  const [publicFormLink, setPublicFormLink] = useState("");
+  const [creatingPublicFormLink, setCreatingPublicFormLink] = useState(false);
+  const [publicFormLinkMessage, setPublicFormLinkMessage] = useState("");
   const [fieldErrors, setFieldErrors] = useState<CardFieldErrors>({});
   const [countryPickerOpen, setCountryPickerOpen] = useState(false);
   const [countrySearch, setCountrySearch] = useState("");
@@ -66,35 +112,74 @@ export default function CreateCardPage() {
     async function loadForm() {
       const searchParams = new URLSearchParams(window.location.search);
       const cardId = searchParams.get("id");
+      const pathSegments = window.location.pathname.split("/").filter(Boolean);
+      const cardFormIdentifier = searchParams.get("publicToken") ||
+        (pathSegments[0] === "f" ? pathSegments[1] || "" : "");
       setIsCanvas(searchParams.get("canvas") === "1");
+      setRouteModeResolved(true);
+      if (cardFormIdentifier) setPublicFormIdentifier(cardFormIdentifier);
       if (cardId) {
         setEditingId(cardId);
         setLoadingCard(true);
       }
 
       try {
-        const sessionResponse = await fetch("/api/auth/session");
-        const session = await sessionResponse.json();
+        if (cardFormIdentifier) {
+          const response = await fetch(`/api/public/card-form/${encodeURIComponent(cardFormIdentifier)}`);
+          const result: unknown = await response.json();
+          if (!response.ok) {
+            const message = result && typeof result === "object" && "message" in result && typeof result.message === "string"
+              ? result.message
+              : "Unable to load this card form.";
+            throw new Error(message);
+          }
+          if (!isPublicCardFormSettings(result)) throw new Error("Card form settings are invalid.");
+          setCompanyLogo(result.logoData);
+          setLocations(result.locations);
+          setForm((current) => ({
+            ...current,
+            company: result.companyName,
+            website: result.website,
+            logoData: result.logoData,
+          }));
+          setCompanySettingsLoaded(true);
+          return;
+        }
+
+        const [sessionResponse, settingsResponse, cardResponse] = await Promise.all([
+          fetch("/api/auth/session"),
+          fetch("/api/company"),
+          cardId ? fetch(`/api/cards/${encodeURIComponent(cardId)}`) : Promise.resolve(null),
+        ]);
+        const [session, settings] = await Promise.all([
+          sessionResponse.json(),
+          settingsResponse.json(),
+        ]);
         if (!sessionResponse.ok) throw new Error(session.message || "Unable to load account details.");
         const branchId = typeof session.user.branchId === "string" ? session.user.branchId : "";
+        setCanGenerateFormLink(
+          (session.user.role === "COMPANY_ADMIN" && !branchId) ||
+          (session.user.role === "SUPER_ADMIN" && typeof session.activeCompanyId === "string")
+        );
         if (branchId) setForm((current) => ({ ...current, branchId }));
-        const settingsResponse = await fetch("/api/company");
-        const settings = await settingsResponse.json();
         if (!settingsResponse.ok) throw new Error(settings.message || "Unable to load company settings.");
+        const companyLocations: CompanyLocation[] = Array.isArray(settings.locations)
+          ? settings.locations.filter(isCompanyLocation)
+          : [];
         setCompanyLogo(settings.logoData);
+        setLocations(companyLocations);
         setForm((current) => ({
           ...current,
           company: settings.companyName,
-          address: settings.address || "",
           website: settings.website,
           logoData: settings.logoData,
         }));
         setCompanySettingsLoaded(true);
 
         if (!cardId) return;
-        const response = await fetch(`/api/cards/${encodeURIComponent(cardId)}`);
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.message || "Unable to load card.");
+        if (!cardResponse) throw new Error("Unable to load card.");
+        const result = await cardResponse.json();
+        if (!cardResponse.ok) throw new Error(result.message || "Unable to load card.");
         setForm({
           ...initialForm,
           fullName: result.fullName,
@@ -112,6 +197,9 @@ export default function CreateCardPage() {
           accentColor: result.accentColor || initialForm.accentColor,
           branchId: result.branchId || "",
         });
+        setSelectedLocationId(
+          companyLocations.find((location) => location.officeLocation === (result.address || ""))?.id || ""
+        );
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to load card.");
       } finally {
@@ -130,6 +218,7 @@ export default function CreateCardPage() {
     if (field === "mobile") {
       value = value.replace(/\D/g, "").slice(0, 15);
     }
+    if (field === "address" && !publicFormIdentifier) setSelectedLocationId("");
     setForm((current) => ({ ...current, [field]: value }));
     if (field !== "branchId" && field in fieldErrors) {
       setFieldErrors((current) => ({
@@ -177,18 +266,51 @@ export default function CreateCardPage() {
     event.preventDefault();
     setError("");
     const validationErrors = validateCardFields(form);
+    if (publicFormIdentifier) {
+      if (!locations.some((location) => location.id === selectedLocationId)) {
+        validationErrors.address = "Select a location.";
+      } else if (!form.address.trim()) {
+        validationErrors.address = "Office address is required.";
+      }
+    }
     setFieldErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) return;
+    if (publicFormIdentifier && !showPublicPreview) {
+      setShowPublicPreview(true);
+      return;
+    }
     setLoading(true);
     try {
-      const payload = form;
-      const response = await fetch(editingId ? `/api/cards/${encodeURIComponent(editingId)}` : "/api/cards", {
-        method: editingId ? "PUT" : "POST",
+      const payload = publicFormIdentifier
+        ? {
+            fullName: form.fullName,
+            designation: form.designation,
+            countryCode: form.countryCode,
+            mobile: form.mobile,
+            email: form.email,
+            address: form.address,
+            linkedin: form.linkedin,
+            locationId: selectedLocationId,
+          }
+        : form;
+      const response = await fetch(
+        publicFormIdentifier
+          ? `/api/public/card-form/${encodeURIComponent(publicFormIdentifier)}`
+          : editingId ? `/api/cards/${encodeURIComponent(editingId)}` : "/api/cards",
+        {
+        method: publicFormIdentifier ? "POST" : editingId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-      });
+        }
+      );
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || "Unable to create card.");
+      if (publicFormIdentifier) {
+        if (!result || typeof result.id !== "string") throw new Error("Created card response is invalid.");
+        setPublicCardCreated(true);
+        setLoading(false);
+        return;
+      }
       if (new URLSearchParams(window.location.search).get("canvas") === "1" && window.parent !== window) {
         window.parent.postMessage({ type: "card-created", success: true }, window.location.origin);
         return;
@@ -198,6 +320,73 @@ export default function CreateCardPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
       setLoading(false);
+    }
+  }
+
+  async function copyFormLink(link: string) {
+    try {
+      await navigator.clipboard.writeText(link);
+      return;
+    } catch {
+      const input = document.createElement("textarea");
+      input.value = link;
+      input.setAttribute("readonly", "");
+      input.style.position = "fixed";
+      input.style.opacity = "0";
+      document.body.appendChild(input);
+      input.select();
+      const copied = document.execCommand("copy");
+      input.remove();
+      if (!copied) throw new Error("The link was created, but could not be copied. Try copying it again.");
+    }
+  }
+
+  async function generatePublicFormLink() {
+    const response = await fetch("/api/company/card-form-link", { method: "POST" });
+    const result: unknown = await response.json();
+    const errorMessage = result && typeof result === "object" && "message" in result && typeof result.message === "string"
+      ? result.message
+      : "Unable to create a public card form link.";
+    if (!response.ok) throw new Error(errorMessage);
+    if (!result || typeof result !== "object" || !("identifier" in result) || typeof result.identifier !== "string") {
+      throw new Error("Public card form link response is invalid.");
+    }
+    return new URL(`/f/${encodeURIComponent(result.identifier)}`, window.location.origin).toString();
+  }
+
+  async function sharePublicFormLink() {
+    setCreatingPublicFormLink(true);
+    setError("");
+    setPublicFormLinkMessage("");
+    try {
+      const generatedNewLink = !publicFormLink;
+      const linkPromise = publicFormLink ? Promise.resolve(publicFormLink) : generatePublicFormLink();
+      let clipboardWritePromise: Promise<boolean> | undefined;
+      if (
+        generatedNewLink &&
+        navigator.clipboard &&
+        typeof navigator.clipboard.write === "function" &&
+        typeof ClipboardItem !== "undefined"
+      ) {
+        try {
+          clipboardWritePromise = navigator.clipboard.write([
+            new ClipboardItem({
+              "text/plain": linkPromise.then((link) => new Blob([link], { type: "text/plain" })),
+            }),
+          ]).then(() => true, () => false);
+        } catch {
+          clipboardWritePromise = Promise.resolve(false);
+        }
+      }
+      const link = await linkPromise;
+      if (generatedNewLink) setPublicFormLink(link);
+      const copied = clipboardWritePromise ? await clipboardWritePromise : false;
+      if (!copied) await copyFormLink(link);
+      setPublicFormLinkMessage("Form link copied. Share it with anyone who needs a card; they can review details before confirming creation.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to create a public card form link.");
+    } finally {
+      setCreatingPublicFormLink(false);
     }
   }
 
@@ -214,26 +403,113 @@ export default function CreateCardPage() {
   ];
 
   return (
-    <div className={isCanvas ? "min-h-screen" : "flex min-h-screen flex-col md:flex-row"}>
-      {!isCanvas && <Sidebar />}
-      <main className={isCanvas ? "min-w-0 p-4 sm:p-5" : "min-w-0 flex-1 p-5 md:p-8 xl:p-10"}>
-        <div className={`create-card-shell mx-auto w-full ${isCanvas ? "max-w-2xl" : "max-w-4xl"}`}>
-          {!isCanvas && <header className="mb-5">
+    <div className={isCanvas || publicFormIdentifier ? "min-h-screen bg-slate-50" : "flex min-h-screen flex-col md:flex-row"}>
+      {!isCanvas && !publicFormIdentifier && <Sidebar />}
+      <main className={isCanvas || publicFormIdentifier ? "min-w-0 p-4 sm:p-5" : "min-w-0 flex-1 p-5 md:p-8 xl:p-10"}>
+        <div className={`create-card-shell mx-auto w-full ${isCanvas || publicFormIdentifier ? "max-w-2xl" : "max-w-4xl"}`}>
+          {publicFormIdentifier ? (
+            <header className="mb-5">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700">Digital card form</p>
+              <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">{publicCardCreated ? "Your card is created!" : "Create your digital card"}</h1>
+              <p className="mt-2 text-sm text-slate-500">{publicCardCreated ? `Your card has been saved successfully in ${form.company}.` : `Fill in your details and review the card before confirming its creation in ${form.company}.`}</p>
+            </header>
+          ) : !isCanvas && routeModeResolved && <header className="mb-5">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700">Card setup</p>
             <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">{editingId ? "Edit card details" : "Create a digital card"}</h1>
             <p className="mt-2 text-sm text-slate-500">{editingId ? "Update the contact details shown on this card." : "Enter contact details to create a digital card and QR code."}</p>
           </header>}
           <form noValidate onSubmit={submit} className="create-card-form rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_12px_36px_rgba(15,23,42,0.06)] sm:p-6 md:p-8">
             {loadingCard && <p role="status" className="mb-5 rounded-lg bg-blue-50 p-3 text-sm text-blue-700">Loading card details...</p>}
+            {publicFormIdentifier && publicCardCreated ? (
+              <section aria-label="Created digital card">
+                <div className="mx-auto w-full max-w-[430px]">
+                  <VisitingCardFace
+                    fullName={form.fullName}
+                    designation={form.designation}
+                    company={form.company}
+                    countryCode={form.countryCode}
+                    mobile={form.mobile}
+                    email={form.email}
+                    address={form.address}
+                    website={form.website}
+                    linkedin={form.linkedin}
+                    linkedinName=""
+                    logoData={form.logoData}
+                    accentColor={form.accentColor}
+                  />
+                </div>
+              </section>
+            ) : publicFormIdentifier && showPublicPreview ? (
+              <section aria-labelledby="public-card-review-heading">
+                <h2 id="public-card-review-heading" className="text-lg font-bold text-slate-900">Review your card</h2>
+                <p className="mt-1 text-sm text-slate-500">Check your details. Choose Edit details to make corrections before creating your card.</p>
+                <div className="mx-auto mt-6 w-full max-w-[430px]">
+                  <VisitingCardFace
+                    fullName={form.fullName}
+                    designation={form.designation}
+                    company={form.company}
+                    countryCode={form.countryCode}
+                    mobile={form.mobile}
+                    email={form.email}
+                    address={form.address}
+                    website={form.website}
+                    linkedin={form.linkedin}
+                    linkedinName=""
+                    logoData={form.logoData}
+                    accentColor={form.accentColor}
+                  />
+                </div>
+                {error && <p role="alert" className="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+                <div className="mt-8 flex flex-wrap justify-end gap-3 border-t border-slate-100 pt-6">
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => { setShowPublicPreview(false); setError(""); }}
+                    className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    Edit details
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading || !companySettingsLoaded}
+                    className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Save size={17} />{loading ? "Creating card..." : "Confirm and create card"}
+                  </button>
+                </div>
+              </section>
+            ) : (
+            <>
             <div className="mb-6 flex items-start gap-3 border-b border-slate-100 pb-5">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700"><UserRound size={19} /></span>
-              <div>
+              <div className="min-w-0 flex-1">
                 <h2 className="text-base font-bold text-slate-900">Personal & professional information</h2>
                 <p className="mt-1 text-sm text-slate-500">Fields marked with <span className="font-semibold text-red-500">*</span> are required.</p>
               </div>
+              {!publicFormIdentifier && !editingId && canGenerateFormLink && companySettingsLoaded && (
+                <div className="flex shrink-0 flex-col items-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { void sharePublicFormLink(); }}
+                    disabled={creatingPublicFormLink}
+                    className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Share2 size={16} />
+                    {creatingPublicFormLink ? "Copying..." : "Copy link"}
+                  </button>
+                  {publicFormLink && (
+                    <Link href={publicFormLink} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-700 underline underline-offset-2">
+                      Open public form
+                    </Link>
+                  )}
+                </div>
+              )}
             </div>
+            {publicFormLinkMessage && <p role="status" className="mb-5 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700">{publicFormLinkMessage}</p>}
             <div className="grid gap-5 sm:grid-cols-2">
-              {fields.map((field) => {
+              {fields
+                .filter((field) => !publicFormIdentifier || (field.key !== "website" && field.key !== "linkedinName"))
+                .map((field) => {
                 if (field.key === "mobile") {
                   const countryCodeError = fieldErrors.countryCode;
                   const isCustomCountryCode = !countryCodes.some(({ code }) => code === form.countryCode);
@@ -339,46 +615,87 @@ export default function CreateCardPage() {
 
                 const Icon = field.icon;
                 const fieldError = fieldErrors[field.key];
+                const locationSelected = locations.some((location) => location.id === selectedLocationId);
+                const locationSelectionError = publicFormIdentifier && !locationSelected ? fieldError : undefined;
                 const isFixed = field.key === "company" || field.key === "website";
-                return <label key={field.key} className={field.key === "address" ? "sm:col-span-2" : ""}>
-                  <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700">{field.label}{field.required && <span className="text-red-500"> *</span>}{isFixed && <span className="text-xs font-normal text-slate-400">Fixed</span>}</span>
-                  <div className={`flex items-start rounded-xl border bg-slate-50 px-3 ${fieldError ? "border-red-500" : "border-slate-200"}`}>
+                if (field.key === "address") {
+                  return (
+                    <Fragment key={field.key}>
+                      <label className="text-sm font-semibold text-slate-700">
+                        Location{publicFormIdentifier && <span className="text-red-500"> *</span>}
+                        <div className="mt-2 flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3 focus-within:border-blue-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-blue-500/10">
+                          <MapPin size={17} className="shrink-0 text-slate-400" />
+                          <select
+                            aria-label="Location"
+                            aria-required={Boolean(publicFormIdentifier)}
+                            aria-invalid={Boolean(locationSelectionError)}
+                            aria-describedby={locationSelectionError ? "address-error" : undefined}
+                            required={Boolean(publicFormIdentifier)}
+                            value={selectedLocationId || (!publicFormIdentifier ? locations.find((location) => location.officeLocation === form.address)?.id || "" : "")}
+                            disabled={locations.length === 0}
+                            onChange={(event) => {
+                              const location = locations.find((item) => item.id === event.target.value);
+                              setSelectedLocationId(location?.id || "");
+                              setForm((current) => ({ ...current, address: location?.officeLocation || "" }));
+                              setFieldErrors((current) => ({ ...current, address: undefined }));
+                            }}
+                            className="w-full bg-transparent px-3 py-3 text-sm font-normal outline-none disabled:cursor-not-allowed disabled:text-slate-400"
+                          >
+                            <option value="">{locations.length ? "Select a location" : "No locations added"}</option>
+                            {locations.map((location) => (
+                              <option key={location.id} value={location.id}>{location.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        {locationSelectionError && <span id="address-error" className="mt-1 block text-xs font-normal text-red-600">{locationSelectionError}</span>}
+                        {locations.length === 0 && <span className="mt-1 block text-xs font-normal text-slate-500">Add locations in Company Profile to choose one here.</span>}
+                      </label>
+                      <label className="sm:col-span-2">
+                        <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700">{field.label}</span>
+                        <div className={`flex items-start rounded-xl border bg-slate-50 px-3 ${fieldError ? "border-red-500" : "border-slate-200"}`}>
+                          <Icon size={17} className="mt-3 shrink-0 text-slate-400" />
+                          <textarea
+                            id={field.key}
+                            aria-invalid={Boolean(fieldError)}
+                            aria-describedby={fieldError ? `${field.key}-error` : undefined}
+                            className="min-h-28 w-full resize-y bg-transparent px-3 py-3 text-sm outline-none focus:outline-none placeholder:text-slate-400"
+                            maxLength={field.maxLength}
+                            value={form.address}
+                            onChange={(event) => update("address", event.target.value)}
+                            onBlur={(event) => setFieldErrors((current) => ({ ...current, address: validateCardField("address", event.target.value) }))}
+                            placeholder={field.placeholder}
+                            rows={4}
+                          />
+                        </div>
+                        {fieldError && !locationSelectionError && <span id={`${field.key}-error`} className="mt-1 block text-xs text-red-600">{fieldError}</span>}
+                      </label>
+                    </Fragment>
+                  );
+                }
+                return <label key={field.key}>
+                  <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700">{field.label}{field.key === "linkedin" && publicFormIdentifier && <span className="text-xs font-normal text-slate-400">(optional)</span>}{field.required && <span className="text-red-500"> *</span>}{isFixed && <span className="text-xs font-normal text-slate-400">Fixed</span>}</span>
+                  <div className={`flex items-center rounded-xl border bg-slate-50 px-3 ${fieldError ? "border-red-500" : "border-slate-200"}`}>
                     <Icon size={17} className="mt-3 shrink-0 text-slate-400" />
-                    {field.key === "address" ? (
-                      <textarea
-                        id={field.key}
-                        aria-invalid={Boolean(fieldError)}
-                        aria-describedby={fieldError ? `${field.key}-error` : undefined}
-                        className="min-h-28 w-full resize-y bg-transparent px-3 py-3 text-sm outline-none focus:outline-none placeholder:text-slate-400"
-                        maxLength={field.maxLength}
-                        value={form.address}
-                        onChange={(event) => update("address", event.target.value)}
-                        onBlur={(event) => setFieldErrors((current) => ({ ...current, address: validateCardField("address", event.target.value) }))}
-                        placeholder={field.placeholder}
-                        rows={4}
-                      />
-                    ) : (
-                      <input
-                        id={field.key}
-                        aria-invalid={Boolean(fieldError)}
-                        aria-describedby={fieldError ? `${field.key}-error` : undefined}
-                        className={`w-full bg-transparent px-3 py-3 text-sm outline-none focus:outline-none placeholder:text-slate-400 ${isFixed ? "cursor-not-allowed text-slate-600" : ""}`}
-                        type={field.type || "text"}
-                        required={field.required}
-                        readOnly={isFixed}
-                        maxLength={field.maxLength}
-                        value={form[field.key]}
-                        onChange={(event) => update(field.key, event.target.value)}
-                        onBlur={(event) => setFieldErrors((current) => ({ ...current, [field.key]: validateCardField(field.key, event.target.value) }))}
-                        placeholder={field.placeholder}
-                      />
-                    )}
+                    <input
+                      id={field.key}
+                      aria-invalid={Boolean(fieldError)}
+                      aria-describedby={fieldError ? `${field.key}-error` : undefined}
+                      className={`w-full bg-transparent px-3 py-3 text-sm outline-none focus:outline-none placeholder:text-slate-400 ${isFixed ? "cursor-not-allowed text-slate-600" : ""}`}
+                      type={field.type || "text"}
+                      required={field.required}
+                      readOnly={isFixed}
+                      maxLength={field.maxLength}
+                      value={form[field.key]}
+                      onChange={(event) => update(field.key, event.target.value)}
+                      onBlur={(event) => setFieldErrors((current) => ({ ...current, [field.key]: validateCardField(field.key, event.target.value) }))}
+                      placeholder={field.placeholder}
+                    />
                   </div>
                   {fieldError && <span id={`${field.key}-error`} className="mt-1 block text-xs text-red-600">{fieldError}</span>}
                 </label>;
               })}
             </div>
-            <section aria-labelledby="card-logo-heading" className="mt-7 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+            {!publicFormIdentifier && <section aria-labelledby="card-logo-heading" className="mt-7 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
               <h2 id="card-logo-heading" className="text-sm font-semibold text-slate-800">Card logo</h2>
               <p className="mt-1 text-xs leading-5 text-slate-500">Each card has its own logo. New cards start with the workspace logo, but changing it later won&apos;t change saved cards.</p>
               <div className="mt-4 flex flex-wrap items-center gap-4">
@@ -392,9 +709,11 @@ export default function CreateCardPage() {
                 <button type="button" onClick={() => update("logoData", companyLogo)} className="rounded-lg px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Use workspace logo</button>
                 <p className="w-full text-xs text-slate-500">PNG, JPEG, or WebP · maximum 500 KB</p>
               </div>
-            </section>
+            </section>}
             {error && <p role="alert" className="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-            <div className="mt-8 flex flex-wrap justify-end gap-3 border-t border-slate-100 pt-6">{isCanvas ? <button type="button" onClick={() => window.parent.postMessage({ type: "close-card-form" }, window.location.origin)} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancel</button> : <Link href={editingId ? "/my-cards" : "/"} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancel</Link>}<button disabled={loading || loadingCard || !companySettingsLoaded} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"><Save size={17} />{loading ? (editingId ? "Saving changes..." : "Creating card...") : (editingId ? "Save changes" : "Create card")}</button></div>
+            <div className="mt-8 flex flex-wrap justify-end gap-3 border-t border-slate-100 pt-6">{isCanvas ? <button type="button" onClick={() => window.parent.postMessage({ type: "close-card-form" }, window.location.origin)} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancel</button> : !publicFormIdentifier && <Link href={editingId ? "/my-cards" : "/"} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancel</Link>}<button disabled={loading || loadingCard || !companySettingsLoaded} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"><Save size={17} />{loading ? (editingId ? "Saving changes..." : "Creating card...") : publicFormIdentifier ? "Preview card" : editingId ? "Save changes" : "Create card"}</button></div>
+            </>
+            )}
           </form>
         </div>
       </main>

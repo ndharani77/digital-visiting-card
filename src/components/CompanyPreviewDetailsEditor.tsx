@@ -103,6 +103,7 @@ export default function CompanyPreviewDetailsEditor({
   const [loading, setLoading] = useState(!embedded);
   const [loaded, setLoaded] = useState(embedded && Boolean(initialPreview));
   const [saving, setSaving] = useState(false);
+  const [applyingAll, setApplyingAll] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -400,7 +401,7 @@ export default function CompanyPreviewDetailsEditor({
     }
   }
 
-  async function save() {
+  async function save(): Promise<boolean> {
     setSaving(true);
     setError("");
     setMessage("");
@@ -421,10 +422,40 @@ export default function CompanyPreviewDetailsEditor({
       onSaved?.(result.preview, isCardCustom);
       setMessage(cardId ? "This card’s scan preview and WhatsApp message were saved." : "Preview details saved. They will appear on scanned contact pages.");
       if (embedded) onClose?.();
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save preview details.");
+      return false;
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function applyPreviewToAllCards() {
+    if (cardId) return;
+    const confirmed = window.confirm(
+      "Save the current preview edits and apply them to all existing company cards? This replaces individual card preview settings but keeps contact details and office addresses unchanged."
+    );
+    if (!confirmed) return;
+
+    setApplyingAll(true);
+    setError("");
+    setMessage("");
+    try {
+      if (!await save()) return;
+      setMessage("");
+      const response = await fetch("/api/company/apply-preview", { method: "POST" });
+      const result: unknown = await response.json();
+      if (!response.ok) throw new Error(responseMessage(result, "Unable to apply preview content to existing cards."));
+      if (!result || typeof result !== "object" || !("updatedCount" in result) ||
+          typeof result.updatedCount !== "number" || !Number.isInteger(result.updatedCount) || result.updatedCount < 0) {
+        throw new Error("Apply all response is invalid.");
+      }
+      setMessage(`Preview content applied to ${result.updatedCount} existing card${result.updatedCount === 1 ? "" : "s"}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to apply preview content to existing cards.");
+    } finally {
+      setApplyingAll(false);
     }
   }
 
@@ -738,7 +769,8 @@ export default function CompanyPreviewDetailsEditor({
           {(!embedded || !scrollable) && (
             <footer className="mt-7 flex flex-wrap justify-end gap-3 border-t border-slate-200 py-5">
               {cardId && <button type="button" onClick={() => { void restoreCompanyDefaults(); }} disabled={loading || !loaded || saving || !isCustom} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"><RotateCcw size={17} />Use company defaults</button>}
-              <button type="button" onClick={() => { void save(); }} disabled={loading || !loaded || saving} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"><Save size={17} />{saving ? "Saving..." : "Save preview details"}</button>
+              {!cardId && <button type="button" onClick={() => { void applyPreviewToAllCards(); }} disabled={loading || !loaded || saving || applyingAll} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60">{applyingAll ? "Applying..." : "Apply all"}</button>}
+              <button type="button" onClick={() => { void save(); }} disabled={loading || !loaded || saving || applyingAll} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"><Save size={17} />{saving ? "Saving..." : "Save preview details"}</button>
             </footer>
           )}
         </div>
@@ -747,7 +779,8 @@ export default function CompanyPreviewDetailsEditor({
         <footer className="shrink-0 border-t border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur">
           <div className="mx-auto grid max-w-4xl grid-cols-1 gap-2 min-[400px]:grid-cols-2">
             {cardId && <button type="button" onClick={() => { void restoreCompanyDefaults(); }} disabled={loading || !loaded || saving || !isCustom} className="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-200 px-2 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"><RotateCcw size={17} />Use company defaults</button>}
-            <button type="button" onClick={() => { void save(); }} disabled={loading || !loaded || saving} className="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-blue-600 px-2 py-2.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"><Save size={17} />{saving ? "Saving..." : "Save preview details"}</button>
+            {!cardId && <button type="button" onClick={() => { void applyPreviewToAllCards(); }} disabled={loading || !loaded || saving || applyingAll} className="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-blue-200 bg-blue-50 px-2 py-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60">{applyingAll ? "Applying..." : "Apply all"}</button>}
+            <button type="button" onClick={() => { void save(); }} disabled={loading || !loaded || saving || applyingAll} className="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-blue-600 px-2 py-2.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"><Save size={17} />{saving ? "Saving..." : "Save preview details"}</button>
           </div>
         </footer>
       )}

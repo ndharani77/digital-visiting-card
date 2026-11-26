@@ -11,6 +11,14 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const publicCardRoute = /^\/card\/[^/]+\/?$/.test(pathname);
   const [authenticatedCardPath, setAuthenticatedCardPath] = useState<string | null>(null);
+  const [canvasCardForm, setCanvasCardForm] = useState(false);
+
+  useEffect(() => {
+    setCanvasCardForm(
+      pathname === "/create-card" &&
+      new URLSearchParams(window.location.search).get("canvas") === "1"
+    );
+  }, [pathname]);
 
   useEffect(() => {
     if (!publicCardRoute) return;
@@ -46,7 +54,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
         </div>
         <div className="min-w-0 flex-1">
           {!publicCardRoute && <WorkspaceHeader showDashboardLink={pathname !== "/"} />}
-          <div className="workspace-route-content">{children}</div>
+          <div className="workspace-route-content" style={canvasCardForm ? { paddingTop: 0 } : undefined}>{children}</div>
         </div>
       </div>
     </WorkspaceLayoutContext.Provider>

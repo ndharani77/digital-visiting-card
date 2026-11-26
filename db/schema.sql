@@ -12,9 +12,22 @@ CREATE TABLE IF NOT EXISTS companies (
   description TEXT NOT NULL DEFAULT '',
   status VARCHAR(16) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
   preview JSONB NOT NULL DEFAULT '{}'::jsonb,
+  locations JSONB NOT NULL DEFAULT '[]'::jsonb,
+  public_card_form_id VARCHAR(16),
+  public_card_form_token_hash CHAR(64),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS locations JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS public_card_form_id VARCHAR(16);
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS public_card_form_token_hash CHAR(64);
+CREATE UNIQUE INDEX IF NOT EXISTS companies_public_card_form_id_unique
+  ON companies (public_card_form_id)
+  WHERE public_card_form_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS companies_public_card_form_token_hash_unique
+  ON companies (public_card_form_token_hash)
+  WHERE public_card_form_token_hash IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS branches (
   id UUID PRIMARY KEY,

@@ -17,6 +17,7 @@ import {
   normalizeCompanyTheme,
 } from "@/lib/company-theme";
 import { normalizeUserPreferences, type UserPreferences } from "@/lib/user-preferences";
+import { getDefaultCompanyLocations, normalizeCompanyLocations } from "@/lib/company-settings";
 import { createUniqueCardSlug } from "@/lib/card-slug";
 import type { CompanyRecord } from "@/lib/platform-store";
 import type { UserRole, VisitingCard } from "@/lib/types";
@@ -85,6 +86,8 @@ export type JsonActivityLog = {
 export type JsonPlatformState = {
   version: 3;
   companies: CompanyRecord[];
+  publicCardFormIds?: Record<string, string>;
+  publicCardFormTokenHashes?: Record<string, string>;
   branches: JsonBranch[];
   employees: JsonEmployee[];
   users: JsonUser[];
@@ -172,6 +175,11 @@ async function createInitialState(): Promise<JsonPlatformState> {
     description: "",
     status: "active",
     branchEnabled: false,
+    locations: normalizeCompanyLocations(settings.locations).length > 0
+      ? normalizeCompanyLocations(settings.locations)
+      : getDefaultCompanyLocations(companyName),
+    locationsInitialized: true,
+    locationsVersion: 1,
     preview: normalizeCompanyPreviewSettings(settings.preview) ?? createDefaultCompanyPreview(companyName),
     theme: DEFAULT_COMPANY_THEME,
     cardAppearance: DEFAULT_CARD_APPEARANCE,
@@ -254,6 +262,17 @@ function migrateCompanyOwnership(state: JsonPlatformState): boolean {
     const cardAppearance = normalizeCardAppearance(company.cardAppearance);
     if (company.cardAppearance !== cardAppearance) {
       company.cardAppearance = cardAppearance;
+      changed = true;
+    }
+    const storedLocations = normalizeCompanyLocations(company.locations);
+    const locations = company.locationsVersion === 1 || storedLocations.length > 0
+      ? storedLocations
+      : getDefaultCompanyLocations(company.name);
+    if (company.locationsInitialized !== true || company.locationsVersion !== 1 ||
+        JSON.stringify(company.locations ?? []) !== JSON.stringify(locations)) {
+      company.locations = locations;
+      company.locationsInitialized = true;
+      company.locationsVersion = 1;
       changed = true;
     }
   }
@@ -413,6 +432,18 @@ async function loadState(): Promise<JsonPlatformState> {
   const migrated: JsonPlatformState = {
     version: 3,
     companies: source.companies as CompanyRecord[],
+    publicCardFormIds:
+      source.publicCardFormIds &&
+      typeof source.publicCardFormIds === "object" &&
+      !Array.isArray(source.publicCardFormIds)
+        ? source.publicCardFormIds as Record<string, string>
+        : {},
+    publicCardFormTokenHashes:
+      source.publicCardFormTokenHashes &&
+      typeof source.publicCardFormTokenHashes === "object" &&
+      !Array.isArray(source.publicCardFormTokenHashes)
+        ? source.publicCardFormTokenHashes as Record<string, string>
+        : {},
     branches: Array.isArray(source.branches) ? source.branches as JsonBranch[] : [],
     employees: source.employees as JsonEmployee[],
     users: source.users as JsonUser[],
