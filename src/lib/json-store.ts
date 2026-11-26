@@ -17,7 +17,7 @@ import {
   normalizeCompanyTheme,
 } from "@/lib/company-theme";
 import { normalizeUserPreferences, type UserPreferences } from "@/lib/user-preferences";
-import { getDefaultCompanyLocations, normalizeCompanyLocations } from "@/lib/company-settings";
+import { getDefaultCompanyLocations, normalizeCompanyLocations, type CompanyLocation } from "@/lib/company-settings";
 import { createUniqueCardSlug } from "@/lib/card-slug";
 import type { CompanyRecord } from "@/lib/platform-store";
 import type { UserRole, VisitingCard } from "@/lib/types";
@@ -66,6 +66,7 @@ export type JsonBranch = {
   country: string;
   description: string;
   status: "active" | "inactive";
+  locations?: CompanyLocation[];
   preview: CompanyRecord["preview"];
   theme: CompanyRecord["theme"];
   cardAppearance: CompanyRecord["cardAppearance"];

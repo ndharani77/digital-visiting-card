@@ -5,7 +5,6 @@ import { Globe, LoaderCircle, Mail, MapPin, Phone, Linkedin, MessageCircle, Shar
 import VisitingCardFace from "@/components/VisitingCardFace";
 import QRCodeDownloads from "@/components/QRCodeDownloads";
 import CompanyProfile from "@/components/CompanyProfile";
-import CardPreviewPdfDownload from "@/components/CardPreviewPdfDownload";
 import type { VisitingCard } from "@/lib/types";
 import { getCardQrPath } from "@/lib/card-slug";
 import { createVCard } from "@/lib/vcard";
@@ -16,6 +15,7 @@ import {
   type CompanyPreviewSettings,
 } from "@/lib/company-content";
 import { DEFAULT_COMPANY_THEME, normalizeCompanyTheme, type CompanyTheme } from "@/lib/company-theme";
+import type { CompanyLocation } from "@/lib/company-settings";
 
 type CompanyBranding = { companyName: string; logoData: string };
 type CardHolderEditValues = {
@@ -29,138 +29,28 @@ type CardHolderEditValues = {
   linkedinName: string;
 };
 
-function oklabToRgb(lightness: number, a: number, b: number, alpha?: string) {
-  const l = lightness + 0.3963377774 * a + 0.2158037573 * b;
-  const m = lightness - 0.1055613458 * a - 0.0638541728 * b;
-  const s = lightness - 0.0894841775 * a - 1.291485548 * b;
-  const l3 = l * l * l;
-  const m3 = m * m * m;
-  const s3 = s * s * s;
-  const channels = [
-    4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3,
-    -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3,
-    -0.0041960863 * l3 - 0.7034186147 * m3 + 1.707614701 * s3,
-  ];
-  const toSrgb = (channel: number) => {
-    const linear = Math.max(0, Math.min(1, channel));
-    const srgb = linear <= 0.0031308 ? linear * 12.92 : 1.055 * linear ** (1 / 2.4) - 0.055;
-    return Math.round(srgb * 255);
-  };
-  const rgb = channels.map(toSrgb).join(" ");
-  if (!alpha) return `rgb(${rgb})`;
-  const opacity = alpha.endsWith("%") ? Number(alpha.slice(0, -1)) / 100 : Number(alpha);
-  return `rgb(${rgb} / ${Math.max(0, Math.min(1, opacity))})`;
+function isCompanyLocation(value: unknown): value is CompanyLocation {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    "id" in value &&
+    typeof value.id === "string" &&
+    "name" in value &&
+    typeof value.name === "string" &&
+    "officeLocation" in value &&
+    typeof value.officeLocation === "string"
+  );
 }
 
-function colorFunctionsToRgb(value: string) {
-  return value
-    .replace(/oklch\(([^()]*)\)/gi, (_color, components: string) => {
-      const [colorChannels, alpha] = components.split("/").map((part) => part.trim());
-      const [lightness, chroma, hue] = colorChannels.split(/\s+/).map(Number);
-      return oklabToRgb(lightness / 100, chroma * Math.cos(hue * Math.PI / 180), chroma * Math.sin(hue * Math.PI / 180), alpha);
-    })
-    .replace(/oklab\(([^()]*)\)/gi, (_color, components: string) => {
-      const [colorChannels, alpha] = components.split("/").map((part) => part.trim());
-      const [lightness, a, b] = colorChannels.split(/\s+/).map(Number);
-      return oklabToRgb(lightness, a, b, alpha);
-    })
-    .replace(/\s+in\s+oklab(?=[,)]|$)/gi, "");
-}
-
-async function createPreviewPdf(fileName: string) {
-  const pages = Array.from(document.querySelectorAll<HTMLElement>(".pdf-export-page"));
-  const servicePageCount = document.querySelectorAll(".company-profile-service-page").length;
-  if (servicePageCount === 0 || pages.length !== servicePageCount + 2) {
-    throw new Error("The full card preview is not ready to download.");
-  }
-  const exportRoot = document.querySelector<HTMLElement>(".public-card-page-content");
-  if (!exportRoot) throw new Error("The card preview is not ready to download.");
-
-  const images = pages.flatMap((page) => Array.from(page.querySelectorAll("img")));
-  images.forEach((image) => {
-    image.loading = "eager";
-  });
-  await Promise.all(images.map((image) => image.decode()));
-
-  const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-    import("html2canvas"),
-    import("jspdf"),
-  ]);
-  const rootStyle = getComputedStyle(document.documentElement);
-  const legacyColorTokens = Array.from(rootStyle)
-    .filter((property) => property.startsWith("--color-"))
-    .map((property) => [property, colorFunctionsToRgb(rootStyle.getPropertyValue(property).trim())] as const);
-  const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
-  const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
-  const margin = 12;
-  const colorProperties = [
-    "color",
-    "background-color",
-    "border-top-color",
-    "border-right-color",
-    "border-bottom-color",
-    "border-left-color",
-    "outline-color",
-    "text-decoration-color",
-    "caret-color",
-    "column-rule-color",
-    "-webkit-text-fill-color",
-    "-webkit-text-stroke-color",
-    "box-shadow",
-    "text-shadow",
-    "background-image",
-    "--tw-gradient-stops",
-    "--tw-gradient-via-stops",
-    "--tw-gradient-position",
-  ];
-
-  for (const [index, page] of pages.entries()) {
-    const canvas = await html2canvas(page, {
-      scale: 1.5,
-      useCORS: true,
-      allowTaint: false,
-      backgroundColor: "#ffffff",
-      imageTimeout: 15000,
-      logging: false,
-      onclone: (clonedDocument) => {
-        const clonedWindow = clonedDocument.defaultView;
-        if (!clonedWindow) return;
-        for (const [property, value] of legacyColorTokens) {
-          clonedDocument.documentElement.style.setProperty(property, value);
-        }
-        const clonedPage = clonedDocument.querySelectorAll<HTMLElement>(".pdf-export-page")[index];
-        if (!clonedPage) return;
-        const elements = [clonedPage, ...Array.from(clonedPage.querySelectorAll<HTMLElement | SVGElement>("*"))];
-        for (const element of elements) {
-          const computedStyle = clonedWindow.getComputedStyle(element);
-          for (const property of colorProperties) {
-            const value = computedStyle.getPropertyValue(property);
-            if (!/oklch|oklab/i.test(value)) continue;
-            const compatibleValue = colorFunctionsToRgb(value);
-            if (compatibleValue !== value) element.style.setProperty(property, compatibleValue);
-          }
-        }
-      },
-    });
-    const imageData = canvas.toDataURL("image/jpeg", 0.95);
-    const maxWidth = pageWidth - margin * 2;
-    const maxHeight = pageHeight - margin * 2;
-    const ratio = Math.min(maxWidth / canvas.width, maxHeight / canvas.height);
-    const imageWidth = canvas.width * ratio;
-    const imageHeight = canvas.height * ratio;
-
-    if (index > 0) pdf.addPage();
-    pdf.addImage(imageData, "JPEG", (pageWidth - imageWidth) / 2, margin, imageWidth, imageHeight);
-  }
-
-  pdf.save(fileName);
+function isCompanyLocationList(value: unknown): value is CompanyLocation[] {
+  return Array.isArray(value) && value.every(isCompanyLocation);
 }
 
 export default function PublicCardPage({ params }: { params: Promise<{ id: string }> }) {
   const [card, setCard] = useState<VisitingCard | null>(null);
   const [companyPreview, setCompanyPreview] = useState<CompanyPreviewSettings | null>(null);
   const [companyBranding, setCompanyBranding] = useState<CompanyBranding | null>(null);
+  const [companyLocations, setCompanyLocations] = useState<CompanyLocation[]>([]);
   const [companyTheme, setCompanyTheme] = useState<CompanyTheme>(DEFAULT_COMPANY_THEME);
   const [canEditCardPreview, setCanEditCardPreview] = useState(false);
   const [isCardPreviewCustom, setIsCardPreviewCustom] = useState(false);
@@ -178,8 +68,6 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
   const [contactMessage, setContactMessage] = useState("");
   const [shareOptionsOpen, setShareOptionsOpen] = useState(false);
   const [shareMessage, setShareMessage] = useState("");
-  const [isPdfLoading, setIsPdfLoading] = useState(false);
-  const [pdfError, setPdfError] = useState("");
 
   useEffect(() => {
     params.then(({ id: cardId }) => {
@@ -211,12 +99,14 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
         const company = result.company as {
           companyName?: unknown;
           logoData?: unknown;
+          locations?: unknown;
           preview?: unknown;
           theme?: unknown;
         };
         if (
           typeof company.companyName !== "string" ||
           typeof company.logoData !== "string" ||
+          !isCompanyLocationList(company.locations) ||
           !isCompanyPreviewSettings(company.preview)
         ) {
           throw new Error("Company branding details are invalid.");
@@ -225,6 +115,7 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
           throw new Error("Card preview details are invalid.");
         }
         setCompanyTheme(normalizeCompanyTheme(company.theme));
+        setCompanyLocations(company.locations);
         setCard(loadedCard);
         setQrUrl(`${window.location.origin}${getCardQrPath(loadedCard)}`);
         if (qrVisit && window.location.pathname + window.location.search !== getCardQrPath(loadedCard)) {
@@ -420,25 +311,6 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
     }
   }
 
-  async function downloadPreviewPdf() {
-    if (!card || isPdfLoading) return;
-    setPdfError("");
-    setIsPdfLoading(true);
-    document.body.classList.add("pdf-exporting");
-    try {
-      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-      await document.fonts.ready;
-      const safeName = card.fullName.trim().replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "");
-      await createPreviewPdf(`${safeName || "visiting-card"}-preview.pdf`);
-    } catch (err) {
-      console.error("Unable to create the visiting card PDF.", err);
-      setPdfError(err instanceof Error ? `Unable to create the PDF: ${err.message}` : "Unable to create the PDF. Please try again.");
-    } finally {
-      document.body.classList.remove("pdf-exporting");
-      setIsPdfLoading(false);
-    }
-  }
-
   async function saveCardHolderDetails(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!card || !cardEditValues || savingCardDetails) return;
@@ -500,9 +372,6 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
   const whatsappNumber = phoneHref.replace(/\D/g, "");
   return (
     <main className={isQrVisit ? `public-card-page ${isEmbeddedPreview ? "" : "min-h-screen"} bg-[#f3f6fa] px-3 pb-6 pt-2` : "min-h-screen bg-slate-50 px-4 py-12"}>
-      {isPdfLoading && <div role="status" className="fixed inset-0 z-[100] flex items-center justify-center bg-white/85 text-sm font-semibold text-slate-700">
-        <LoaderCircle size={20} className="mr-2 animate-spin" aria-hidden="true" /> Preparing your PDF…
-      </div>}
       <div className={`public-card-page-content mx-auto ${isQrVisit ? "max-w-[430px]" : "max-w-xl"}`}>
         {isQrVisit && canReturnToDashboard && !isEmbeddedPreview && (
           <div className="mb-3 flex gap-2">
@@ -571,6 +440,24 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
                 Email
                 <input required type="email" value={cardEditValues.email} onChange={(event) => setCardEditValues((current) => current ? { ...current, email: event.target.value } : current)} className="mt-1.5 min-h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
                 {cardEditErrors.email && <span className="mt-1 block text-xs text-red-600">{cardEditErrors.email}</span>}
+              </label>
+              <label className="text-sm font-medium text-slate-700 sm:col-span-2">
+                Location
+                <select
+                  aria-label="Location"
+                  value={companyLocations.find((location) => location.officeLocation === cardEditValues.address)?.id || ""}
+                  onChange={(event) => {
+                    const location = companyLocations.find((item) => item.id === event.target.value);
+                    setCardEditValues((current) => current ? { ...current, address: location?.officeLocation || "" } : current);
+                  }}
+                  className="mt-1.5 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="">{companyLocations.length ? "Select a location" : "No company locations available"}</option>
+                  {companyLocations.map((location) => (
+                    <option key={location.id} value={location.id}>{location.name}</option>
+                  ))}
+                </select>
+                {!companyLocations.length && <span className="mt-1 block text-xs font-normal text-slate-500">You can still edit the address below.</span>}
               </label>
               <label className="text-sm font-medium text-slate-700 sm:col-span-2">
                 Address
@@ -655,7 +542,7 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
             </div>
 
             <div className="relative z-10 mx-5 mt-5 border-t border-slate-200">
-              <div className="card-contact-actions grid grid-cols-6 gap-y-4 py-4">
+              <div className="card-contact-actions grid grid-cols-5 gap-y-4 py-4">
                 {card.isActive ? <a aria-label={companyPreview?.labels.call} href={`tel:${phoneHref}`} className="company-brand-hover flex min-w-0 flex-col items-center gap-1.5 px-0.5 text-[11px] font-medium text-slate-700">
                   <span className="company-brand-text flex h-10 w-10 items-center justify-center rounded-full bg-slate-100"><Phone size={18} /></span>{companyPreview?.labels.call}
                 </a> : <span aria-disabled="true" className="flex min-w-0 flex-col items-center gap-1.5 px-0.5 text-[11px] font-medium text-slate-700">
@@ -677,9 +564,7 @@ export default function PublicCardPage({ params }: { params: Promise<{ id: strin
                 <button aria-label={companyPreview?.labels.share} type="button" disabled={!card.isActive} onClick={() => { setShareOptionsOpen(true); setShareMessage(""); }} className="company-brand-hover flex min-w-0 flex-col items-center gap-1.5 px-0.5 text-[11px] font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-60">
                   <span className="company-brand-text flex h-10 w-10 items-center justify-center rounded-full bg-slate-100"><Share2 size={18} /></span>{companyPreview?.labels.share}
                 </button>
-                {card.isActive && companyBranding && <CardPreviewPdfDownload isLoading={isPdfLoading} onClick={downloadPreviewPdf} />}
               </div>
-              {card.isActive && pdfError && <p role="alert" className="card-action-feedback mb-3 text-center text-sm text-red-600">{pdfError}</p>}
               {card.isActive && contactError && <p role="alert" className="card-action-feedback mb-3 text-center text-sm text-red-600">{contactError}</p>}
               {card.isActive && contactMessage && <p role="status" className="card-action-feedback mb-3 text-center text-sm text-slate-600">{contactMessage}</p>}
             </div>

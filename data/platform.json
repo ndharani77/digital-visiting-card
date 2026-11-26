@@ -161,7 +161,7 @@
       "locations": [
         {
           "id": "brihaspathi-hyderabad",
-          "name": "Hyderabad",
+          "name": "Hyderab",
           "officeLocation": "Brihaspathi Technologies Limited \n#501, #508-510, Shangrila Plaza, Park View Enclave, Banjara Hills, Hyderabad, Telangana 500034"
         },
         {
@@ -345,7 +345,7 @@
       "countryCode": "+91",
       "mobile": "9247994408",
       "email": "priyanka@brihaspathi.com",
-      "address": "Brihaspathi Technologies Limited\n#501, #508-510, Shangrila Plaza, Road No. 2, Park View Enclave, Banjara Hills, Hyderabad - 34 Toll Free - 18002968899",
+      "address": "Brihaspathi Technologies Limited \n#501, #508-510, Shangrila Plaza, Park View Enclave, Banjara Hills, Hyderabad, Telangana 500034",
       "linkedin": "",
       "linkedinName": "",
       "status": "active"
@@ -456,7 +456,7 @@
       "countryCode": "+91",
       "mobile": "9247994408",
       "email": "priyanka@brihaspathi.com",
-      "address": "Brihaspathi Technologies Limited\n#501, #508-510, Shangrila Plaza, Road No. 2, Park View Enclave, Banjara Hills, Hyderabad - 34 Toll Free - 18002968899",
+      "address": "Brihaspathi Technologies Limited \n#501, #508-510, Shangrila Plaza, Park View Enclave, Banjara Hills, Hyderabad, Telangana 500034",
       "website": "https://www.brihaspathi.com/",
       "linkedin": "",
       "linkedinName": "",
@@ -2085,6 +2085,42 @@
       "entityType": "employee",
       "entityId": "2a673790-93c6-49b1-bb6f-0525358784e2",
       "createdAt": "2026-11-26T11:18:58.970Z"
+    },
+    {
+      "id": "801c6098-ebd3-4077-a69a-e134b2eebfc4",
+      "companyId": "2d14f4b4-3080-436d-9b4a-bb70ad5b769f",
+      "actorUserId": "ed166485-e2d7-4118-be78-a6f71d3f5627",
+      "action": "updated",
+      "entityType": "company",
+      "entityId": "2d14f4b4-3080-436d-9b4a-bb70ad5b769f",
+      "createdAt": "2026-11-26T12:32:56.748Z"
+    },
+    {
+      "id": "8b7b6b58-cd72-40c3-b376-a4fcc650f01f",
+      "companyId": "2d14f4b4-3080-436d-9b4a-bb70ad5b769f",
+      "actorUserId": "ed166485-e2d7-4118-be78-a6f71d3f5627",
+      "action": "updated",
+      "entityType": "company",
+      "entityId": "2d14f4b4-3080-436d-9b4a-bb70ad5b769f",
+      "createdAt": "2026-11-26T12:33:00.097Z"
+    },
+    {
+      "id": "cc668429-417b-4def-8ebf-eb9cff21ed94",
+      "companyId": "2d14f4b4-3080-436d-9b4a-bb70ad5b769f",
+      "actorUserId": "ed166485-e2d7-4118-be78-a6f71d3f5627",
+      "action": "updated",
+      "entityType": "employee",
+      "entityId": "c5689854-a4d5-45e9-b696-7709bb301bdd",
+      "createdAt": "2026-11-26T12:36:40.775Z"
+    },
+    {
+      "id": "ffb27437-aab9-4978-aaf2-71795b5a0940",
+      "companyId": "2d14f4b4-3080-436d-9b4a-bb70ad5b769f",
+      "actorUserId": "ed166485-e2d7-4118-be78-a6f71d3f5627",
+      "action": "updated",
+      "entityType": "card",
+      "entityId": "97c6ddd8-93cc-48c3-932c-39cca9acb55b",
+      "createdAt": "2026-11-26T12:36:40.776Z"
     }
   ]
 }

@@ -64,6 +64,7 @@ type CardRow = {
   company_logo: string;
   company_website: string;
   company_preview: CompanyPreviewSettings;
+  company_locations?: unknown;
 };
 
 export type CompanyRecord = {
@@ -108,6 +109,7 @@ export type BranchRecord = {
   country: string;
   description: string;
   status: "active" | "inactive";
+  locations?: CompanyLocation[];
   preview: CompanyPreviewSettings;
   theme: CompanyTheme;
   cardAppearance: CardAppearance;
@@ -789,7 +791,7 @@ export async function getCompany(user: AuthUser, companyId?: string | null): Pro
         description: branch.description,
         status: branch.status,
         branchEnabled: false,
-        locations: [],
+        locations: branch?.locations ?? company.locations ?? [],
         preview: branch.preview,
         theme: branch.theme,
         cardAppearance: branch.cardAppearance,
@@ -1202,7 +1204,7 @@ export async function getAllCardsForSuperAdmin(user: AuthUser): Promise<Visiting
   }
   const db = getDatabase();
   const rows = await db`
-    SELECT ${cardProjection(db)}
+    SELECT ${cardProjection(db)}, co.locations AS company_locations
     FROM cards c
     JOIN companies co ON co.id = c.company_id
     ORDER BY c.created_at DESC
@@ -1284,7 +1286,7 @@ export async function getPublicCard(id: string): Promise<{ card: VisitingCard; c
         address: branch?.address || company.address,
         website: branch?.website || company.website,
         logoData: branch?.logoData || company.logoData,
-        locations: [],
+        locations: branch?.locations ?? company.locations ?? [],
         preview: branch?.preview ?? company.preview,
         theme: normalizeCompanyTheme(branch?.theme ?? company.theme),
         cardAppearance: normalizeCardAppearance(branch?.cardAppearance ?? company.cardAppearance),
@@ -1315,7 +1317,7 @@ export async function getPublicCard(id: string): Promise<{ card: VisitingCard; c
       address: row.company_address,
       website: row.company_website,
       logoData: row.company_logo,
-      locations: [],
+      locations: normalizeCompanyLocations(row.company_locations),
       preview: row.company_preview,
       theme: DEFAULT_COMPANY_THEME,
       cardAppearance: DEFAULT_CARD_APPEARANCE,
